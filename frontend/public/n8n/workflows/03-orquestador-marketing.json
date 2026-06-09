@@ -1,0 +1,233 @@
+{
+  "name": "Korriente · Orquestador de Marketing (multi-agente)",
+  "meta": {
+    "korriente": {
+      "agente": "orquestador-marketing",
+      "version": "1.0.0",
+      "patron": "orquestador + workers especializados",
+      "workers": ["worker-analisis-mercado", "worker-copywriter", "worker-seo-keywords"],
+      "modelo_router": "claude-haiku-4-5 (barato, decide y reparte)",
+      "modelo_sintesis": "claude-sonnet-4-6 (razonamiento, junta todo)",
+      "nota": "Importa tambien los 3 workers de la carpeta /workers y reasigna cada nodo 'Llamar worker' al workflow correspondiente."
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-manual",
+      "name": "Probar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "in1",
+              "name": "objetivo",
+              "value": "Lanzar campana de un nuevo plan de software contable para PyMEs chilenas. Publico: contadores y duenos de PyME de 10-50 empleados.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-entrada",
+      "name": "Entrada (objetivo)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model_router", "value": "claude-haiku-4-5", "type": "string" },
+            { "id": "c2", "name": "model_sintesis", "value": "claude-sonnet-4-6", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config (modelos)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config (modelos)').item.json.model_router, max_tokens: 700, system: 'Eres un orquestador de marketing. A partir del objetivo del cliente, redacta un brief breve y especifico para cada agente trabajador. Responde SOLO con JSON valido: {\\\"contexto\\\": \\\"...\\\", \\\"brief_mercado\\\": \\\"...\\\", \\\"brief_copy\\\": \\\"...\\\", \\\"brief_seo\\\": \\\"...\\\"}. Cada brief en 1-2 frases, en espanol de Chile.', messages: [ { role: 'user', content: $('Entrada (objetivo)').item.json.objetivo } ] }) }}",
+        "options": {}
+      },
+      "id": "node-router",
+      "name": "Router (reparte briefs)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 400],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsea el plan del orquestador en briefs para cada worker.\nconst raw = $json.content?.[0]?.text || '{}';\nlet d;\ntry { d = JSON.parse(raw); } catch (e) { d = {}; }\nconst objetivo = $('Entrada (objetivo)').item.json.objetivo;\nreturn [{ json: {\n  objetivo,\n  contexto: d.contexto || objetivo,\n  brief_mercado: d.brief_mercado || objetivo,\n  brief_copy: d.brief_copy || objetivo,\n  brief_seo: d.brief_seo || objetivo\n} }];"
+      },
+      "id": "node-briefs",
+      "name": "Preparar briefs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REEMPLAZAR_worker_mercado",
+          "mode": "list",
+          "cachedResultName": "Korriente · Worker Analisis de mercado"
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "id": "node-w1",
+      "name": "Llamar worker: Mercado",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1120, 220],
+      "notes": "Tras importar, reasigna a 'worker-analisis-mercado'."
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REEMPLAZAR_worker_copy",
+          "mode": "list",
+          "cachedResultName": "Korriente · Worker Copywriter"
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "id": "node-w2",
+      "name": "Llamar worker: Copy",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1120, 400],
+      "notes": "Tras importar, reasigna a 'worker-copywriter'."
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REEMPLAZAR_worker_seo",
+          "mode": "list",
+          "cachedResultName": "Korriente · Worker SEO"
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "id": "node-w3",
+      "name": "Llamar worker: SEO",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1120, 580],
+      "notes": "Tras importar, reasigna a 'worker-seo-keywords'."
+    },
+    {
+      "parameters": { "numberInputs": 3 },
+      "id": "node-merge",
+      "name": "Juntar resultados",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1360, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Junta la salida de los 3 workers en un solo objeto.\nconst items = $input.all();\nconst out = { workers: {} };\nfor (const it of items) {\n  const w = it.json.worker || 'desconocido';\n  out.workers[w] = it.json.resultado ?? it.json;\n}\nout.objetivo = $('Preparar briefs').first().json.objetivo;\nreturn [{ json: out }];"
+      },
+      "id": "node-aggr",
+      "name": "Consolidar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1580, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config (modelos)').item.json.model_sintesis, max_tokens: 1500, system: 'Eres un director de marketing. Te paso el objetivo y los resultados de tres especialistas (analisis de mercado, copywriting y SEO). Entrega un plan de campana accionable y ordenado en markdown, en espanol de Chile: 1) resumen, 2) segmentos y angulo, 3) mensajes/copys recomendados, 4) keywords y SEO, 5) siguientes pasos.', messages: [ { role: 'user', content: JSON.stringify($json) } ] }) }}",
+        "options": {}
+      },
+      "id": "node-sintesis",
+      "name": "Sintetizar plan (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 400],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "o1", "name": "plan_markdown", "value": "={{ $json.content[0].text }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-out",
+      "name": "Plan final",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2020, 400]
+    }
+  ],
+  "connections": {
+    "Probar manualmente": { "main": [[{ "node": "Entrada (objetivo)", "type": "main", "index": 0 }]] },
+    "Entrada (objetivo)": { "main": [[{ "node": "Config (modelos)", "type": "main", "index": 0 }]] },
+    "Config (modelos)": { "main": [[{ "node": "Router (reparte briefs)", "type": "main", "index": 0 }]] },
+    "Router (reparte briefs)": { "main": [[{ "node": "Preparar briefs", "type": "main", "index": 0 }]] },
+    "Preparar briefs": {
+      "main": [[
+        { "node": "Llamar worker: Mercado", "type": "main", "index": 0 },
+        { "node": "Llamar worker: Copy", "type": "main", "index": 0 },
+        { "node": "Llamar worker: SEO", "type": "main", "index": 0 }
+      ]]
+    },
+    "Llamar worker: Mercado": { "main": [[{ "node": "Juntar resultados", "type": "main", "index": 0 }]] },
+    "Llamar worker: Copy": { "main": [[{ "node": "Juntar resultados", "type": "main", "index": 1 }]] },
+    "Llamar worker: SEO": { "main": [[{ "node": "Juntar resultados", "type": "main", "index": 2 }]] },
+    "Juntar resultados": { "main": [[{ "node": "Consolidar", "type": "main", "index": 0 }]] },
+    "Consolidar": { "main": [[{ "node": "Sintetizar plan (LLM)", "type": "main", "index": 0 }]] },
+    "Sintetizar plan (LLM)": { "main": [[{ "node": "Plan final", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "multi-agente" }, { "name": "marketing" }]
+}

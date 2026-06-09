@@ -1,0 +1,180 @@
+{
+  "name": "Korriente · Cobranza y recordatorios de pago",
+  "meta": {
+    "korriente": {
+      "agente": "cobranza-recordatorios",
+      "version": "1.0.0",
+      "metrica_negocio": "% facturas pagadas a tiempo; dias promedio de cobro",
+      "modelo_default": "claude-haiku-4-5 (barato)",
+      "ley_19628": "tono no intimidatorio; sin datos bancarios; PII minima",
+      "spec": "specs/002-cobranza-recordatorios.md"
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "days", "triggerAtHour": 9 }]
+        }
+      },
+      "id": "node-cron",
+      "name": "Cada dia 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "model", "value": "claude-haiku-4-5", "type": "string" },
+            { "id": "a2", "name": "monto_umbral_clp", "value": 2000000, "type": "number" },
+            { "id": "a3", "name": "max_intentos", "value": 3, "type": "number" },
+            {
+              "id": "a4",
+              "name": "system_prompt",
+              "value": "Eres un asistente de cobranza de una PyME chilena. Redacta un recordatorio de pago cordial, breve y NO intimidatorio (Ley 19.628). Trata de usted. No menciones datos bancarios ni montos de tarjetas. Responde SOLO con JSON: {\"mensaje\": \"...\", \"canal_sugerido\": \"whatsapp|email\"}. Incluye numero de factura y fecha de vencimiento si vienen en los datos.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config (edita aqui)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://TU-ERP-O-SHEET/api/facturas?estado=vencida",
+        "options": {}
+      },
+      "id": "node-fetch",
+      "name": "Traer facturas vencidas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "notes": "Reemplaza la URL por tu ERP, Google Sheets o base de datos. Debe devolver una lista de facturas con: cliente, telefono, email, numero, monto, vencimiento, intentos."
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "node-split",
+      "name": "Una por una",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [660, 300],
+      "notes": "Si tu API ya devuelve un item por factura, puedes borrar este nodo."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.monto }}",
+              "rightValue": "={{ $('Config (edita aqui)').item.json.monto_umbral_clp }}",
+              "operator": { "type": "number", "operation": "gte" }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "node-if-escala",
+      "name": "Monto alto o muchos intentos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "d1", "name": "accion", "value": "ESCALAR_HUMANO", "type": "string" },
+            { "id": "d2", "name": "motivo", "value": "Monto sobre umbral o cliente delicado: requiere gestion humana.", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-escalar",
+      "name": "Escalar a cobrador humano",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1100, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config (edita aqui)').item.json.model, max_tokens: 400, system: $('Config (edita aqui)').item.json.system_prompt, messages: [ { role: 'user', content: 'Datos de la factura: ' + JSON.stringify({ cliente: $json.cliente, numero: $json.numero, monto: $json.monto, vencimiento: $json.vencimiento, intentos: $json.intentos }) } ] }) }}",
+        "options": {}
+      },
+      "id": "node-llm",
+      "name": "Redactar recordatorio (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 420],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Toma el texto del LLM y lo prepara para enviar.\nconst raw = $json.content?.[0]?.text || '{}';\nlet data;\ntry { data = JSON.parse(raw); } catch (e) { data = { mensaje: raw, canal_sugerido: 'whatsapp' }; }\nreturn [{ json: { accion: 'ENVIAR', ...data } }];"
+      },
+      "id": "node-parse",
+      "name": "Preparar envio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://TU-CANAL/api/enviar",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $('Una por una').item.json.telefono, canal: $json.canal_sugerido, mensaje: $json.mensaje }) }}",
+        "options": {}
+      },
+      "id": "node-enviar",
+      "name": "Enviar (WhatsApp/Email)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 420],
+      "notes": "Conecta tu proveedor: 360dialog, Twilio, WhatsApp Cloud API o SMTP. Reemplaza la URL."
+    }
+  ],
+  "connections": {
+    "Cada dia 09:00": { "main": [[{ "node": "Config (edita aqui)", "type": "main", "index": 0 }]] },
+    "Config (edita aqui)": { "main": [[{ "node": "Traer facturas vencidas", "type": "main", "index": 0 }]] },
+    "Traer facturas vencidas": { "main": [[{ "node": "Una por una", "type": "main", "index": 0 }]] },
+    "Una por una": { "main": [[{ "node": "Monto alto o muchos intentos?", "type": "main", "index": 0 }]] },
+    "Monto alto o muchos intentos?": {
+      "main": [
+        [{ "node": "Escalar a cobrador humano", "type": "main", "index": 0 }],
+        [{ "node": "Redactar recordatorio (LLM)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Redactar recordatorio (LLM)": { "main": [[{ "node": "Preparar envio", "type": "main", "index": 0 }]] },
+    "Preparar envio": { "main": [[{ "node": "Enviar (WhatsApp/Email)", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "cobranza" }]
+}

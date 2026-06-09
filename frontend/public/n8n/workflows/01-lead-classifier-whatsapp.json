@@ -1,0 +1,237 @@
+{
+  "name": "Korriente · Clasificador de leads WhatsApp",
+  "meta": {
+    "korriente": {
+      "agente": "lead-classifier-whatsapp",
+      "version": "1.0.0",
+      "metrica_negocio": "tiempo de respuesta a leads < 2 min",
+      "modelo_default": "claude-haiku-4-5 (barato)",
+      "ley_19628": "telefono enmascarado en logs; sin datos bancarios",
+      "spec": "specs/001-lead-classifier-whatsapp.md"
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-in",
+      "name": "WhatsApp entrante",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "korriente-whatsapp-lead"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "model",
+              "value": "claude-haiku-4-5",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "confianza_min",
+              "value": 0.6,
+              "type": "number"
+            },
+            {
+              "id": "a3",
+              "name": "system_prompt",
+              "value": "Eres un clasificador de leads para una PyME chilena. Clasifica el mensaje del cliente y responde SOLO con JSON valido, sin texto adicional ni markdown. Esquema exacto: {\"intencion\": \"cotizacion|consulta|reclamo|spam\", \"confianza\": 0.0, \"respuesta_sugerida\": \"...\", \"motivo\": \"...\"}. Reglas: si hay molestia, queja o mal servicio => intencion=reclamo. Mensajes promocionales o links sospechosos => spam. Consulta simple respondible (horarios, direccion) => consulta. Interes en comprar/precio => cotizacion. Si dudas, usa confianza baja. Tono de respuesta_sugerida: cordial, chileno, breve.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config (edita aqui)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "mensaje",
+              "value": "={{ $('WhatsApp entrante').item.json.body?.message || $('WhatsApp entrante').item.json.body?.text || $('WhatsApp entrante').item.json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "b2",
+              "name": "telefono",
+              "value": "={{ $('WhatsApp entrante').item.json.body?.from || $('WhatsApp entrante').item.json.from }}",
+              "type": "string"
+            },
+            {
+              "id": "b3",
+              "name": "nombre",
+              "value": "={{ $('WhatsApp entrante').item.json.body?.name || 'Cliente' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-extraer",
+      "name": "Extraer mensaje",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config (edita aqui)').item.json.model, max_tokens: 400, system: $('Config (edita aqui)').item.json.system_prompt, messages: [ { role: 'user', content: $json.mensaje } ] }) }}",
+        "options": {}
+      },
+      "id": "node-llm",
+      "name": "Clasificar (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZAR",
+          "name": "Anthropic x-api-key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsea la salida del LLM y decide si escala a humano (HITL).\nconst cfg = $('Config (edita aqui)').item.json;\nconst ext = $('Extraer mensaje').item.json;\nconst raw = $json.content?.[0]?.text || '{}';\nlet data;\ntry {\n  data = JSON.parse(raw);\n} catch (e) {\n  data = { intencion: 'consulta', confianza: 0, respuesta_sugerida: '', motivo: 'parse_error' };\n}\nconst mensaje = ext.mensaje || '';\nconst sensible = /(monto|contrato|legal|abogado|demanda|factura|deuda)/i.test(mensaje);\nconst pideHumano = /(hablar con (una )?persona|ejecutivo|humano|asesor)/i.test(mensaje);\nconst escala = data.intencion === 'reclamo' || (data.confianza ?? 0) < (cfg.confianza_min ?? 0.6) || sensible || pideHumano;\n// Enmascara telefono para logs (Ley 19.628)\nconst tel = String(ext.telefono || '');\nconst telLog = tel.length > 4 ? tel.slice(0, 4) + '****' + tel.slice(-2) : '****';\nreturn [{ json: { ...data, escala, telefono: ext.telefono, telefono_log: telLog, nombre: ext.nombre, mensaje } }];"
+      },
+      "id": "node-decidir",
+      "name": "Parsear + decidir HITL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.escala }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if",
+      "name": "Escala a humano?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d1",
+              "name": "accion",
+              "value": "ALERTAR_EJECUTIVO",
+              "type": "string"
+            },
+            {
+              "id": "d2",
+              "name": "respuesta_cliente",
+              "value": "Gracias por escribir. Un ejecutivo te va a contactar a la brevedad para ayudarte personalmente.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-humano",
+      "name": "Derivar a humano",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1320, 180]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1",
+              "name": "accion",
+              "value": "RESPONDER_AUTO",
+              "type": "string"
+            },
+            {
+              "id": "e2",
+              "name": "respuesta_cliente",
+              "value": "={{ $json.respuesta_sugerida }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-auto",
+      "name": "Responder automatico",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1320, 420]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, intencion: $json.intencion, confianza: $json.confianza, escala: $('Parsear + decidir HITL').item.json.escala, accion: $json.accion, respuesta: $json.respuesta_cliente }) }}",
+        "options": {}
+      },
+      "id": "node-respond",
+      "name": "Responder webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "WhatsApp entrante": { "main": [[{ "node": "Config (edita aqui)", "type": "main", "index": 0 }]] },
+    "Config (edita aqui)": { "main": [[{ "node": "Extraer mensaje", "type": "main", "index": 0 }]] },
+    "Extraer mensaje": { "main": [[{ "node": "Clasificar (LLM)", "type": "main", "index": 0 }]] },
+    "Clasificar (LLM)": { "main": [[{ "node": "Parsear + decidir HITL", "type": "main", "index": 0 }]] },
+    "Parsear + decidir HITL": { "main": [[{ "node": "Escala a humano?", "type": "main", "index": 0 }]] },
+    "Escala a humano?": {
+      "main": [
+        [{ "node": "Derivar a humano", "type": "main", "index": 0 }],
+        [{ "node": "Responder automatico", "type": "main", "index": 0 }]
+      ]
+    },
+    "Derivar a humano": { "main": [[{ "node": "Responder webhook", "type": "main", "index": 0 }]] },
+    "Responder automatico": { "main": [[{ "node": "Responder webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "leads" }]
+}

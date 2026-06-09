@@ -1,0 +1,88 @@
+{
+  "name": "Korriente · Worker SEO",
+  "meta": {
+    "korriente": {
+      "agente": "worker-seo-keywords",
+      "rol": "trabajador especializado",
+      "entrada": "brief_seo",
+      "salida": "{ worker, resultado }",
+      "modelo_default": "claude-haiku-4-5"
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "w-trigger",
+      "name": "Llamado por orquestador",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model", "value": "claude-haiku-4-5", "type": "string" },
+            {
+              "id": "c2",
+              "name": "system_prompt",
+              "value": "Eres especialista SEO para PyMEs chilenas. A partir del brief, propone keywords y metadatos. Responde SOLO con JSON valido: {\"keywords_principales\": [\"...\"], \"keywords_long_tail\": [\"...\"], \"meta_title\": \"...\", \"meta_description\": \"...\", \"ideas_contenido\": [\"...\"]}. Considera busquedas en Chile.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model, max_tokens: 700, system: $('Config').item.json.system_prompt, messages: [ { role: 'user', content: ($('Llamado por orquestador').item.json.brief_seo || $('Llamado por orquestador').item.json.objetivo || 'Sin brief') } ] }) }}",
+        "options": {}
+      },
+      "id": "w-llm",
+      "name": "Keywords (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d; try { d = JSON.parse(raw); } catch (e) { d = { texto: raw }; }\nreturn [{ json: { worker: 'seo', resultado: d } }];"
+      },
+      "id": "w-out",
+      "name": "Empaquetar salida",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    }
+  ],
+  "connections": {
+    "Llamado por orquestador": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Keywords (LLM)", "type": "main", "index": 0 }]] },
+    "Keywords (LLM)": { "main": [[{ "node": "Empaquetar salida", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "worker" }]
+}
