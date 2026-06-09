@@ -1,0 +1,11 @@
+{
+  "_comment": "Copia este archivo a .claude/settings.json (config COMPARTIDA del proyecto, commiteada). Declara los plugins recomendados para Korriente Agentes. Requiere tener agregado el marketplace 'knowledge-work-plugins' en tu Claude (Configuracion > Capabilities). Ver docs/setup-claude-code.md.",
+  "enabledPlugins": {
+    "engineering@knowledge-work-plugins": true,
+    "design@knowledge-work-plugins": true,
+    "figma@knowledge-work-plugins": true,
+    "product-management@knowledge-work-plugins": true,
+    "productivity@knowledge-work-plugins": true,
+    "twilio-developer-kit@knowledge-work-plugins": true
+  }
+}
