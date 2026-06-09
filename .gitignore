@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Node / Next
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Datos locales
+*.sqlite3
+*.db
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Claude Code (config local/personal)
+.claude/settings.local.json
+
+# Salida generada por graphify (regenerable con /graphify)
+graphify-out/
