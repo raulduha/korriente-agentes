@@ -14,14 +14,17 @@ Prioridad: 🟡 alta · ⚪ backlog. Marca `[x]` al terminar.
 - [x] `workers/worker-analisis-mercado.json`
 - [x] `workers/worker-copywriter.json`
 - [x] `workers/worker-seo-keywords.json`
+- [x] `04-agendador-citas.json` — agendador de citas
+- [x] `05-orquestador-ventas.json` — equipo de Ventas SDR (multi-agente secuencial)
+- [x] `workers/worker-prospectador.json`
+- [x] `workers/worker-calificador-leads.json`
+- [x] `workers/worker-redactor-propuesta.json`
 - [x] Página `/workflows` con documentación, instalación, seguridad y pricing
 - [x] README en `frontend/public/n8n/README.md`
 - [x] n8n-mcp instalado y registrado (modo documentación)
 
 ## 🟡 Agentes individuales — prioridad alta
-- [ ] **Agendador de citas** — ofrece horarios, agenda en calendario, confirma y recuerda.
-  - Nodos: webhook → Config → leer disponibilidad (Google Calendar/Cal.com) → LLM proponer → crear evento → confirmar.
-  - HITL: choque de horarios o solicitud especial → humano.
+- [x] **Agendador de citas** — `04-agendador-citas.json`. Entiende la solicitud, consulta disponibilidad, agenda u ofrece alternativas. HITL: solicitud especial/fuera de horario.
 - [ ] **FAQ con RAG** — responde desde catálogo/políticas reales, se abstiene si no sabe.
   - Nodos: webhook → embeddings de la pregunta → vector store (Qdrant/PGVector/n8n) → LLM con contexto → responder/abstenerse.
   - Requiere paso de ingestión de documentos (workflow aparte).
@@ -45,7 +48,7 @@ Prioridad: 🟡 alta · ⚪ backlog. Marca `[x]` al terminar.
 
 ## 🟡 Equipos multi-agente
 - [ ] **Ampliar equipo de Marketing**: sumar workers `estratega-de-medios` y `disenador-de-brief`; conectar al orquestador.
-- [ ] **Equipo de Ventas (SDR)**: prospectador → calificador → redactor de propuesta → agendador.
+- [x] **Equipo de Ventas (SDR)**: `05-orquestador-ventas.json` + workers prospectador, calificador y redactor de propuesta (patrón secuencial + HITL). Pendiente: enganchar el paso de agendar al workflow `04-agendador-citas`.
 - [ ] **Equipo de Soporte**: triage → especialista RAG por área → escalador → QA/encuesta.
 
 ## ⚪ Equipos multi-agente — backlog

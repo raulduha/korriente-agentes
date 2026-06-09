@@ -19,7 +19,7 @@ Leyenda de estado: ✅ construido · 🟡 prioridad alta · ⚪ backlog.
 | Agente | Qué hace | Métrica | Modelo | Estado |
 |--------|----------|---------|--------|--------|
 | **Clasificador de leads WhatsApp** | Clasifica intención, responde o escala. | Respuesta < 2 min | haiku | ✅ |
-| **Agendador de citas** | Ofrece horarios, agenda en calendario, confirma y recuerda. | % citas auto-agendadas | haiku | 🟡 |
+| **Agendador de citas** | Ofrece horarios, agenda en calendario, confirma y recuerda. | % citas auto-agendadas | haiku | ✅ |
 | **FAQ con RAG** | Responde desde tu catálogo/políticas reales, se abstiene si no sabe. | % consultas resueltas sin humano | haiku + embeddings | 🟡 |
 | **Recuperador de carritos** | Detecta carrito/cotización abandonada y reengancha por WhatsApp. | % recuperación | haiku | ⚪ |
 | **Scoring de leads** | Puntúa el lead (0–100) por intención y datos, prioriza al equipo. | Conversión de leads calientes | haiku | ⚪ |
@@ -84,13 +84,15 @@ Construido: mercado + copy + SEO + síntesis. Ampliación propuesta:
                    Síntesis → Plan ✅
 ```
 
-### 2.2 Equipo de Ventas (SDR) 🟡
+### 2.2 Equipo de Ventas (SDR) ✅
 ```
 Lead ▶ Orquestador ▶ [Prospectador] ▶ [Calificador/Scoring]
-                  ▶ [Redactor de propuesta] ▶ [Agendador]
-                  ▶ Síntesis: siguiente acción + handoff a humano
+                  ▶ ¿calificado? ─sí▶ [Redactor de propuesta] ▶ handoff humano
+                                 └no▶ secuencia de nurturing
 ```
-Métrica: leads calientes agendados. HITL: cierre y precios → humano.
+Construido (patrón secuencial): `05-orquestador-ventas.json` + 3 workers.
+Métrica: leads calientes con propuesta lista. HITL: cierre y precios → humano.
+Pendiente: enganchar el paso de agendar al workflow `04-agendador-citas`.
 
 ### 2.3 Equipo de Soporte ⚪
 ```

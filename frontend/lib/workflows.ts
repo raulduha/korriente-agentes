@@ -115,6 +115,69 @@ export const WORKFLOWS: Workflow[] = [
     hitl: "Revisión humana del plan antes de ejecutar la campaña.",
     featured: true,
   },
+  {
+    key: "agendador-citas",
+    name: "Agendador de citas",
+    cat: "Atención · Agenda",
+    ico: "📅",
+    tagline:
+      "Entiende cuándo quiere reunirse el cliente, revisa tu agenda y agenda (o propone alternativas) solo.",
+    file: "/n8n/workflows/04-agendador-citas.json",
+    queHace:
+      "Recibe el mensaje del cliente, un modelo extrae la fecha y hora que pide, consulta la disponibilidad en tu calendario y, si hay cupo, crea el evento y confirma. Si no hay, ofrece alternativas. Todo respetando tu horario de atención.",
+    escenarios: [
+      "«¿Pueden el martes a las 10?» → revisa agenda, crea la cita y confirma al instante.",
+      "«Quiero reunirme esta semana» → propone los horarios libres disponibles.",
+      "Horario ocupado → ofrece las alternativas más cercanas, sin doble-reserva.",
+      "Pedido especial o fuera de horario → deriva a una persona.",
+    ],
+    flujo: [
+      "Mensaje entrante",
+      "Config",
+      "Entender solicitud (LLM)",
+      "Consultar disponibilidad",
+      "¿Hay cupo?",
+      "Crear evento / Alternativas",
+    ],
+    conectores: ["WhatsApp (webhook)", "LLM (Anthropic)", "Google Calendar / Cal.com"],
+    modelo: "claude-haiku-4-5 (económico)",
+    costo: "≈ US$0,0004 por solicitud",
+    hitl: "Solicitud especial, fuera de horario o sin cupo → humano.",
+  },
+  {
+    key: "orquestador-ventas",
+    name: "Orquestador de Ventas SDR (multi-agente)",
+    cat: "Ventas · Multi-agente",
+    ico: "🤝",
+    tagline:
+      "Un pipeline de agentes que prospecta, califica y, si el lead vale, redacta la propuesta y la pasa a un humano para cerrar.",
+    file: "/n8n/workflows/05-orquestador-ventas.json",
+    extras: [
+      { name: "Worker · Prospectador", file: "/n8n/workflows/workers/worker-prospectador.json" },
+      { name: "Worker · Calificador de leads", file: "/n8n/workflows/workers/worker-calificador-leads.json" },
+      { name: "Worker · Redactor de propuesta", file: "/n8n/workflows/workers/worker-redactor-propuesta.json" },
+    ],
+    queHace:
+      "Llega un lead. El orquestador encadena tres especialistas en secuencia: el prospectador enriquece el contexto, el calificador le pone un puntaje (0–100) y, solo si supera el umbral, el redactor arma una propuesta. El cierre y el precio final siempre quedan en manos de una persona. Es el molde del patrón secuencial: cada agente trabaja sobre la salida del anterior.",
+    escenarios: [
+      "Lead con necesidad clara → score alto → propuesta lista y handoff a un ejecutivo.",
+      "Lead tibio o con datos faltantes → score bajo → entra a una secuencia de nurturing.",
+      "Tu propio equipo → agregas un worker «negociador» o conectas tu CRM en cualquier paso.",
+    ],
+    flujo: [
+      "Lead",
+      "Prospectar",
+      "+ contexto",
+      "Calificar",
+      "¿Calificado?",
+      "Propuesta + Handoff / Nurturing",
+    ],
+    conectores: ["LLM (Anthropic)", "3 sub-workflows (workers)", "CRM (opcional)"],
+    modelo: "Prospectar/calificar: haiku · Propuesta: sonnet",
+    costo: "≈ US$0,004–0,012 por lead procesado",
+    hitl: "Cierre y precios finales → siempre un humano.",
+    featured: true,
+  },
 ];
 
 // Pasos para instalar cualquiera de los workflows.

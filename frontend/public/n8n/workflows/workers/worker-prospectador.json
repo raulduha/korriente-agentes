@@ -1,0 +1,88 @@
+{
+  "name": "Korriente · Worker Prospectador",
+  "meta": {
+    "korriente": {
+      "agente": "worker-prospectador",
+      "rol": "trabajador especializado",
+      "entrada": "lead (nombre, empresa, email, mensaje)",
+      "salida": "{ worker, resultado }",
+      "modelo_default": "claude-haiku-4-5"
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "w-trigger",
+      "name": "Llamado por orquestador",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model", "value": "claude-haiku-4-5", "type": "string" },
+            {
+              "id": "c2",
+              "name": "system_prompt",
+              "value": "Eres un SDR que enriquece leads para una PyME chilena. Del lead, infiere contexto util SIN inventar datos verificables (no inventes RUT, telefonos ni cifras exactas). Responde SOLO con JSON valido: {\"industria_probable\": \"...\", \"tamano_estimado\": \"...\", \"necesidad_probable\": \"...\", \"urgencia\": \"alta|media|baja\", \"datos_faltantes\": [\"...\"]}.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model, max_tokens: 500, system: $('Config').item.json.system_prompt, messages: [ { role: 'user', content: 'Lead: ' + JSON.stringify({ nombre: $('Llamado por orquestador').item.json.nombre, empresa: $('Llamado por orquestador').item.json.empresa, email: $('Llamado por orquestador').item.json.email, mensaje: $('Llamado por orquestador').item.json.mensaje }) } ] }) }}",
+        "options": {}
+      },
+      "id": "w-llm",
+      "name": "Enriquecer (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d; try { d = JSON.parse(raw); } catch (e) { d = { texto: raw }; }\nreturn [{ json: { worker: 'prospectador', resultado: d } }];"
+      },
+      "id": "w-out",
+      "name": "Empaquetar salida",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    }
+  ],
+  "connections": {
+    "Llamado por orquestador": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Enriquecer (LLM)", "type": "main", "index": 0 }]] },
+    "Enriquecer (LLM)": { "main": [[{ "node": "Empaquetar salida", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "worker" }]
+}

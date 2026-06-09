@@ -1,0 +1,207 @@
+{
+  "name": "Korriente · Orquestador de Ventas SDR (multi-agente)",
+  "meta": {
+    "korriente": {
+      "agente": "orquestador-ventas-sdr",
+      "version": "1.0.0",
+      "patron": "secuencial (pipeline de especialistas) + HITL",
+      "workers": ["worker-prospectador", "worker-calificador-leads", "worker-redactor-propuesta"],
+      "modelo_router": "claude-haiku-4-5",
+      "modelo_propuesta": "claude-sonnet-4-6",
+      "nota": "Importa los 3 workers, reasigna cada nodo 'Llamar worker' y conecta tu CRM. El cierre y los precios finales siempre pasan a un humano."
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-manual",
+      "name": "Probar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "i1", "name": "nombre", "value": "Maria Perez", "type": "string" },
+            { "id": "i2", "name": "empresa", "value": "Distribuidora Andes", "type": "string" },
+            { "id": "i3", "name": "email", "value": "maria@andes.cl", "type": "string" },
+            { "id": "i4", "name": "mensaje", "value": "Hola, vimos su software y queremos automatizar la facturacion de unas 40 personas. Cuanto saldria?", "type": "string" },
+            { "id": "i5", "name": "umbral_score", "value": 60, "type": "number" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-entrada",
+      "name": "Entrada (lead)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model_router", "value": "claude-haiku-4-5", "type": "string" },
+            { "id": "c2", "name": "model_propuesta", "value": "claude-sonnet-4-6", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config (modelos)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 400]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REEMPLAZAR_worker_prospectador",
+          "mode": "list",
+          "cachedResultName": "Korriente · Worker Prospectador"
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "id": "node-w1",
+      "name": "Llamar worker: Prospectar",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [660, 400],
+      "notes": "Reasigna a 'worker-prospectador'."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Acumula: lead + prospecto.\nconst lead = $('Entrada (lead)').first().json;\nconst prospecto = $json.resultado || {};\nreturn [{ json: { ...lead, prospecto } }];"
+      },
+      "id": "node-acc1",
+      "name": "+ prospecto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REEMPLAZAR_worker_calificador",
+          "mode": "list",
+          "cachedResultName": "Korriente · Worker Calificador de leads"
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "id": "node-w2",
+      "name": "Llamar worker: Calificar",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1100, 400],
+      "notes": "Reasigna a 'worker-calificador-leads'."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Acumula: lead + prospecto + calificacion.\nconst prev = $('+ prospecto').first().json;\nconst calificacion = $json.resultado || {};\nreturn [{ json: { ...prev, calificacion, score: calificacion.score ?? 0 } }];"
+      },
+      "id": "node-acc2",
+      "name": "+ calificacion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "id": "q1",
+              "leftValue": "={{ $json.score }}",
+              "rightValue": "={{ $('Entrada (lead)').item.json.umbral_score }}",
+              "operator": { "type": "number", "operation": "gte" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if",
+      "name": "Lead calificado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1540, 400]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REEMPLAZAR_worker_propuesta",
+          "mode": "list",
+          "cachedResultName": "Korriente · Worker Redactor de propuesta"
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "id": "node-w3",
+      "name": "Llamar worker: Propuesta",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1760, 280],
+      "notes": "Reasigna a 'worker-redactor-propuesta'."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "h1", "name": "accion", "value": "HANDOFF_HUMANO", "type": "string" },
+            { "id": "h2", "name": "resumen", "value": "={{ 'Lead calificado (score ' + $('+ calificacion').item.json.score + '). Propuesta lista. Un ejecutivo cierra y confirma precio.' }}", "type": "string" },
+            { "id": "h3", "name": "propuesta", "value": "={{ $json.resultado?.propuesta_md || '' }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-handoff",
+      "name": "Handoff a ejecutivo",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1980, 280]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "n1", "name": "accion", "value": "NUTRIR", "type": "string" },
+            { "id": "n2", "name": "resumen", "value": "={{ 'Lead aun no calificado (score ' + $('+ calificacion').item.json.score + '). Entra a secuencia de seguimiento.' }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-nutrir",
+      "name": "Secuencia de nurturing",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1760, 520]
+    }
+  ],
+  "connections": {
+    "Probar manualmente": { "main": [[{ "node": "Entrada (lead)", "type": "main", "index": 0 }]] },
+    "Entrada (lead)": { "main": [[{ "node": "Config (modelos)", "type": "main", "index": 0 }]] },
+    "Config (modelos)": { "main": [[{ "node": "Llamar worker: Prospectar", "type": "main", "index": 0 }]] },
+    "Llamar worker: Prospectar": { "main": [[{ "node": "+ prospecto", "type": "main", "index": 0 }]] },
+    "+ prospecto": { "main": [[{ "node": "Llamar worker: Calificar", "type": "main", "index": 0 }]] },
+    "Llamar worker: Calificar": { "main": [[{ "node": "+ calificacion", "type": "main", "index": 0 }]] },
+    "+ calificacion": { "main": [[{ "node": "Lead calificado?", "type": "main", "index": 0 }]] },
+    "Lead calificado?": {
+      "main": [
+        [{ "node": "Llamar worker: Propuesta", "type": "main", "index": 0 }],
+        [{ "node": "Secuencia de nurturing", "type": "main", "index": 0 }]
+      ]
+    },
+    "Llamar worker: Propuesta": { "main": [[{ "node": "Handoff a ejecutivo", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "multi-agente" }, { "name": "ventas" }]
+}

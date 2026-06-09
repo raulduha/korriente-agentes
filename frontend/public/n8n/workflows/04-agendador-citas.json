@@ -1,0 +1,210 @@
+{
+  "name": "Korriente · Agendador de citas",
+  "meta": {
+    "korriente": {
+      "agente": "agendador-citas",
+      "version": "1.0.0",
+      "metrica_negocio": "% de citas auto-agendadas sin intervencion humana",
+      "modelo_default": "claude-haiku-4-5 (barato)",
+      "ley_19628": "guarda solo nombre, contacto y horario; sin datos sensibles",
+      "hitl": "solicitud especial, fuera de horario o sin cupo -> humano"
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agendar-cita",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Mensaje entrante",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "korriente-agendar-cita"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model", "value": "claude-haiku-4-5", "type": "string" },
+            { "id": "c2", "name": "duracion_min", "value": 30, "type": "number" },
+            { "id": "c3", "name": "horario_atencion", "value": "Lun a Vie 09:00-18:00 (hora de Chile)", "type": "string" },
+            {
+              "id": "c4",
+              "name": "system_prompt",
+              "value": "Eres un asistente que agenda citas para una PyME chilena. Del mensaje del cliente, extrae la fecha y hora que pide. Responde SOLO con JSON valido: {\"fecha_iso\": \"YYYY-MM-DDTHH:mm\", \"flexible\": true, \"intencion\": \"agendar|reagendar|cancelar|consulta\", \"nota\": \"...\"}. Si no especifica hora exacta, deja fecha_iso vacia y flexible=true. Considera el horario de atencion entregado.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config (edita aqui)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config (edita aqui)').item.json.model, max_tokens: 300, system: $('Config (edita aqui)').item.json.system_prompt + ' Horario: ' + $('Config (edita aqui)').item.json.horario_atencion, messages: [ { role: 'user', content: ($('Mensaje entrante').item.json.body?.message || $('Mensaje entrante').item.json.message || '') } ] }) }}",
+        "options": {}
+      },
+      "id": "node-llm",
+      "name": "Entender solicitud (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsea la intencion del cliente.\nconst raw = $json.content?.[0]?.text || '{}';\nlet d; try { d = JSON.parse(raw); } catch (e) { d = { intencion: 'consulta', fecha_iso: '', flexible: true }; }\nconst b = $('Mensaje entrante').item.json.body || $('Mensaje entrante').item.json;\nreturn [{ json: { ...d, telefono: b.from || b.telefono || '', nombre: b.name || 'Cliente' } }];"
+      },
+      "id": "node-parse",
+      "name": "Preparar consulta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://TU-CALENDARIO/api/disponibilidad",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "fecha", "value": "={{ $json.fecha_iso }}" },
+            { "name": "duracion", "value": "={{ $('Config (edita aqui)').item.json.duracion_min }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-dispo",
+      "name": "Consultar disponibilidad",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 300],
+      "notes": "Conecta tu Google Calendar, Cal.com o agenda. Debe devolver { disponible: bool, slots: [...] }."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.disponible }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if",
+      "name": "Hay cupo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://TU-CALENDARIO/api/eventos",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ titulo: 'Cita con ' + $('Preparar consulta').item.json.nombre, inicio: $('Preparar consulta').item.json.fecha_iso, duracion: $('Config (edita aqui)').item.json.duracion_min, contacto: $('Preparar consulta').item.json.telefono }) }}",
+        "options": {}
+      },
+      "id": "node-crear",
+      "name": "Crear evento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 180],
+      "notes": "Crea el evento en tu calendario. Reemplaza la URL."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "o1", "name": "accion", "value": "CITA_CONFIRMADA", "type": "string" },
+            { "id": "o2", "name": "respuesta", "value": "={{ '¡Listo! Te agende para el ' + $('Preparar consulta').item.json.fecha_iso + '. Te llegara un recordatorio. Si necesitas cambiarla, avisame.' }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-confirmar",
+      "name": "Confirmar",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1540, 180]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "accion", "value": "OFRECER_ALTERNATIVAS", "type": "string" },
+            { "id": "a2", "name": "respuesta", "value": "={{ 'En ese horario no tengo cupo. Tengo estas alternativas: ' + (Array.isArray($json.slots) ? $json.slots.join(', ') : 'escribeme otra fecha y reviso.') }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-alt",
+      "name": "Ofrecer alternativas",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1320, 420]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, accion: $json.accion, respuesta: $json.respuesta }) }}",
+        "options": {}
+      },
+      "id": "node-respond",
+      "name": "Responder webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1760, 300]
+    }
+  ],
+  "connections": {
+    "Mensaje entrante": { "main": [[{ "node": "Config (edita aqui)", "type": "main", "index": 0 }]] },
+    "Config (edita aqui)": { "main": [[{ "node": "Entender solicitud (LLM)", "type": "main", "index": 0 }]] },
+    "Entender solicitud (LLM)": { "main": [[{ "node": "Preparar consulta", "type": "main", "index": 0 }]] },
+    "Preparar consulta": { "main": [[{ "node": "Consultar disponibilidad", "type": "main", "index": 0 }]] },
+    "Consultar disponibilidad": { "main": [[{ "node": "Hay cupo?", "type": "main", "index": 0 }]] },
+    "Hay cupo?": {
+      "main": [
+        [{ "node": "Crear evento", "type": "main", "index": 0 }],
+        [{ "node": "Ofrecer alternativas", "type": "main", "index": 0 }]
+      ]
+    },
+    "Crear evento": { "main": [[{ "node": "Confirmar", "type": "main", "index": 0 }]] },
+    "Confirmar": { "main": [[{ "node": "Responder webhook", "type": "main", "index": 0 }]] },
+    "Ofrecer alternativas": { "main": [[{ "node": "Responder webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "agendamiento" }]
+}

@@ -1,0 +1,88 @@
+{
+  "name": "Korriente · Worker Redactor de propuesta",
+  "meta": {
+    "korriente": {
+      "agente": "worker-redactor-propuesta",
+      "rol": "trabajador especializado",
+      "entrada": "lead + prospecto + calificacion",
+      "salida": "{ worker, resultado: { asunto, propuesta_md, siguiente_paso } }",
+      "modelo_default": "claude-sonnet-4-6 (mejor redaccion)"
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "w-trigger",
+      "name": "Llamado por orquestador",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model", "value": "claude-sonnet-4-6", "type": "string" },
+            {
+              "id": "c2",
+              "name": "system_prompt",
+              "value": "Eres un ejecutivo de ventas que redacta una propuesta breve para una PyME chilena. Usa el contexto del lead. NO inventes precios exactos: deja un marcador [PRECIO A CONFIRMAR] para que un humano lo complete. Responde SOLO con JSON valido: {\"asunto\": \"...\", \"propuesta_md\": \"...markdown...\", \"siguiente_paso\": \"...\"}. Tono profesional y cercano, espanol de Chile.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model, max_tokens: 1200, system: $('Config').item.json.system_prompt, messages: [ { role: 'user', content: 'Contexto del lead: ' + JSON.stringify({ nombre: $('Llamado por orquestador').item.json.nombre, empresa: $('Llamado por orquestador').item.json.empresa, mensaje: $('Llamado por orquestador').item.json.mensaje, prospecto: $('Llamado por orquestador').item.json.prospecto, calificacion: $('Llamado por orquestador').item.json.calificacion }) } ] }) }}",
+        "options": {}
+      },
+      "id": "w-llm",
+      "name": "Redactar propuesta (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d; try { d = JSON.parse(raw); } catch (e) { d = { asunto: 'Propuesta', propuesta_md: raw, siguiente_paso: 'Revisar con ejecutivo' }; }\nreturn [{ json: { worker: 'redactor_propuesta', resultado: d } }];"
+      },
+      "id": "w-out",
+      "name": "Empaquetar salida",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    }
+  ],
+  "connections": {
+    "Llamado por orquestador": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Redactar propuesta (LLM)", "type": "main", "index": 0 }]] },
+    "Redactar propuesta (LLM)": { "main": [[{ "node": "Empaquetar salida", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "worker" }]
+}

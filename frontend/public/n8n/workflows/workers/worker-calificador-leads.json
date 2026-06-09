@@ -1,0 +1,88 @@
+{
+  "name": "Korriente · Worker Calificador de leads",
+  "meta": {
+    "korriente": {
+      "agente": "worker-calificador-leads",
+      "rol": "trabajador especializado",
+      "entrada": "lead + prospecto",
+      "salida": "{ worker, resultado: { score, nivel, razon } }",
+      "modelo_default": "claude-haiku-4-5"
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "w-trigger",
+      "name": "Llamado por orquestador",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model", "value": "claude-haiku-4-5", "type": "string" },
+            {
+              "id": "c2",
+              "name": "system_prompt",
+              "value": "Eres un calificador de leads (estilo BANT) para una PyME chilena. Con el lead y su contexto, asigna un puntaje de 0 a 100 segun encaje, necesidad, urgencia y tamano. Responde SOLO con JSON valido: {\"score\": 0, \"nivel\": \"frio|tibio|caliente\", \"razon\": \"...\", \"datos_faltantes\": [\"...\"]}. Se honesto: si falta informacion, baja el score.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "w-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model, max_tokens: 400, system: $('Config').item.json.system_prompt, messages: [ { role: 'user', content: 'Lead y contexto: ' + JSON.stringify({ nombre: $('Llamado por orquestador').item.json.nombre, empresa: $('Llamado por orquestador').item.json.empresa, mensaje: $('Llamado por orquestador').item.json.mensaje, prospecto: $('Llamado por orquestador').item.json.prospecto }) } ] }) }}",
+        "options": {}
+      },
+      "id": "w-llm",
+      "name": "Calificar (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d; try { d = JSON.parse(raw); } catch (e) { d = { score: 0, nivel: 'frio', razon: 'parse_error' }; }\nreturn [{ json: { worker: 'calificador', resultado: d } }];"
+      },
+      "id": "w-out",
+      "name": "Empaquetar salida",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    }
+  ],
+  "connections": {
+    "Llamado por orquestador": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Calificar (LLM)", "type": "main", "index": 0 }]] },
+    "Calificar (LLM)": { "main": [[{ "node": "Empaquetar salida", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "worker" }]
+}
