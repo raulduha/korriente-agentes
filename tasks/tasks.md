@@ -13,15 +13,18 @@ Marca `[x]` al completar. El orden importa: no saltarse hitos.
 - [x] API FastAPI (webhooks + dashboard) y frontend Next.js base
 
 ## M1 — Primer cliente real (Fase 1)
-- [ ] Conector WhatsApp **real** (BSP: 360dialog) + webhook entrante — spec **borrador** (SPEC-005)
+> Orden de ataque recomendado (ver `docs/plan-negocio.md` §4): 005 → 007 → 006 → 008 → 004.
+> **Plan ejecutable fase a fase, con prompts para el agente y gates: `docs/plan-ejecucion-mvp.md`.**
+- [x] Conector WhatsApp **real** (BSP: 360dialog) + webhook entrante — SPEC-005 implementada
+- [x] Cobro Flow.cl + activación/suspensión por estado del tenant — SPEC-006 implementada
+- [x] Deploy Railway/Render + onboarding checklist + runbook — SPEC-007 implementada (deploy real pendiente tú)
+- [x] Panel: trazas por tenant + alertas 80/100% — SPEC-008 implementada
+- [ ] Solicitudes de cambio + consola de admin (modelo servicio gestionado) — spec **borrador** (SPEC-009)
 - [ ] RAG sobre documentos del cliente (knowledge tool) — spec **borrador** (SPEC-004, adelantado de M2)
 - [ ] Conector email real (SMTP/IMAP) y CRM real del cliente (HTTP)
 - [x] Persistencia SQLite (tenants, uso mensual, trazas) — `app/core/storage.py` (SPEC-003)
-- [ ] Job de reset mensual de cuotas
-- [ ] Panel: vista de trazas por agente (qué hizo, costo, si escaló)
-- [ ] Alertas al 80% y al 100% (email/WhatsApp al cliente y a Korriente)
-- [ ] Deploy en Railway/Render + variables de entorno + secrets
-- [ ] Checklist de onboarding de cliente (form -> config base del agente)
+- [ ] Job de reset mensual de cuotas — cubierto por SPEC-008
+- [ ] **Quick win comercial:** botón "Agendar diagnóstico" → form real (correo/WhatsApp). Antes que cualquier feature.
 
 ## M2 — Productización (Fase 2)
 - [ ] PostgreSQL + migraciones (Alembic) y `tenant_id` en todo

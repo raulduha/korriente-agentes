@@ -54,11 +54,13 @@ class Agent(ABC):
         tools: dict[str, Tool],
         limits: LimitsService,
         memory: Optional[Memory] = None,
+        billing=None,
     ):
         self.provider = llm
         self.tools = tools
         self.limits = limits
         self.memory = memory or Memory()
+        self.billing = billing  # BillingService opcional; None = sin gate de estado
         self._validate_tools()
 
     def _validate_tools(self) -> None:
@@ -75,6 +77,16 @@ class Agent(ABC):
             agent_key=self.spec.key,
             input_text=message.text,
         )
+
+        # Gate de activación por estado del tenant (SPEC-006)
+        if self.billing is not None and not self.billing.is_active(message.tenant_id):
+            trace.blocked = True
+            trace.block_reason = "tenant_suspendido"
+            trace.escalated_to_human = True
+            trace.output = "Servicio en pausa. Por favor contáctanos para regularizar tu cuenta."
+            trace.add_step("blocked", reason="tenant_suspendido")
+            self.memory.save_trace(message.tenant_id, trace.as_dict())
+            return trace
 
         decision = self.limits.check(
             message.tenant_id, conversations=1, est_cost_usd=DEFAULT_PRECHECK_COST_USD

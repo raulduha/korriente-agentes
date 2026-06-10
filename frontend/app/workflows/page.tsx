@@ -1,115 +1,12 @@
-import { Fragment } from "react";
 import Link from "next/link";
-import { WORKFLOWS, PATTERNS, INSTALL_STEPS, TRUST, PRICING_LLM, type Workflow } from "@/lib/workflows";
+import { INSTALL_STEPS, TRUST, PRICING_LLM } from "@/lib/workflows";
+import WorkflowsClient from "./WorkflowsClient";
 
 export const metadata = {
   title: "Workflows descargables — Plantillas n8n de Korriente Agentes",
   description:
     "Workflows de n8n listos para descargar: clasificador de leads, cobranza, triage, cotizaciones y equipos multi-agente. Documentados, con guía de inicio y costo bajo control.",
 };
-
-function WorkflowCard({ w }: { w: Workflow }) {
-  return (
-    <article className={`wf ${w.featured ? "featured" : ""}`} key={w.key} id={w.key}>
-      <div className="wf-top">
-        <div className="wf-ico">{w.ico}</div>
-        <div>
-          <div className="wf-cat">{w.cat}</div>
-          <h3>{w.name}</h3>
-        </div>
-      </div>
-      <p className="wf-tag">{w.tagline}</p>
-
-      <div className="wf-cols">
-        {/* IZQUIERDA: explicación */}
-        <div>
-          <div className="wf-block">
-            <h4>Qué hace</h4>
-            <p style={{ margin: 0, color: "var(--muted)", fontSize: 14.5 }}>{w.queHace}</p>
-          </div>
-
-          <div className="wf-block">
-            <h4>Para quién funciona</h4>
-            <ul className="wf-list wf-quien">
-              {w.paraQuien.map((q, i) => (
-                <li key={i}>{q}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="wf-block">
-            <h4>Escenarios reales</h4>
-            <ul className="wf-list">
-              {w.escenarios.map((e, i) => (
-                <li key={i}>{e}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="wf-block">
-            <h4>Cómo funciona (los nodos)</h4>
-            <div className="wf-flow">
-              {w.flujo.map((n, i) => (
-                <Fragment key={i}>
-                  <span className="node">{n}</span>
-                  {i < w.flujo.length - 1 && <span className="node-arrow">→</span>}
-                </Fragment>
-              ))}
-            </div>
-          </div>
-
-          <div className="wf-block" style={{ marginBottom: 0 }}>
-            <h4>Qué conectar</h4>
-            <div className="pills">
-              {w.conectores.map((c) => (
-                <span className="pill" key={c}>{c}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* DERECHA: meta + descarga */}
-        <div className="wf-meta">
-          <dl style={{ margin: 0 }}>
-            <dt>Modelo de IA</dt>
-            <dd>{w.modelo}</dd>
-            <dt>Costo aprox.</dt>
-            <dd>{w.costo}</dd>
-            <dt>Escala a humano</dt>
-            <dd>{w.hitl}</dd>
-          </dl>
-
-          <div className="wf-dl">
-            <a href={w.file} download className="btn btn-primary" style={{ width: "100%" }}>
-              ⬇ Descargar workflow
-            </a>
-          </div>
-
-          <details className="wf-how-to">
-            <summary>📋 Cómo empezarlo</summary>
-            <ol className="wf-steps-list">
-              {w.comoEmpezar.map((step, i) => (
-                <li key={i}>{step}</li>
-              ))}
-            </ol>
-          </details>
-
-          {w.extras && (
-            <div className="wf-extras">
-              <h4>Incluye sus workers</h4>
-              {w.extras.map((ex) => (
-                <div className="wf-extra-row" key={ex.file}>
-                  <span>{ex.name}</span>
-                  <a href={ex.file} download className="dl-link">Descargar</a>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </article>
-  );
-}
 
 export default function Workflows() {
   return (
@@ -172,83 +69,8 @@ export default function Workflows() {
         </div>
       </section>
 
-      {/* WORKFLOWS */}
-      <section id="workflows" style={{ background: "#fff", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
-        <div className="container">
-          <div className="section-head">
-            <div className="kicker">El catálogo</div>
-            <h2>Los workflows, explicados</h2>
-            <p>
-              Qué hace cada uno, para quién sirve, cómo funciona por dentro y qué conectar.
-              Despliega «Cómo empezarlo» después de descargar para los pasos específicos.
-            </p>
-          </div>
-
-          {WORKFLOWS.map((w) => (
-            <WorkflowCard key={w.key} w={w} />
-          ))}
-        </div>
-      </section>
-
-      {/* MULTI-AGENTE EXPLICADO */}
-      <section id="multiagente">
-        <div className="container">
-          <div className="section-head">
-            <div className="kicker">Patrón multi-agente</div>
-            <h2>Un orquestador + trabajadores especializados</h2>
-            <p>
-              El molde para armar tu propio equipo de agentes. Uno coordina; cada worker es un
-              experto en una sola tarea. Agregas o cambias workers según el negocio.
-            </p>
-          </div>
-          <div className="compare">
-            <div className="card">
-              <h3>El orquestador</h3>
-              <ul>
-                <li>Recibe el objetivo del cliente en lenguaje natural.</li>
-                <li>Lo descompone en briefs específicos por especialidad.</li>
-                <li>Llama a los workers en paralelo (o en secuencia) y espera sus resultados.</li>
-                <li>Sintetiza todo en un entregable ordenado y accionable.</li>
-              </ul>
-            </div>
-            <div className="card" style={{ borderColor: "var(--brand)" }}>
-              <h3>Los workers</h3>
-              <ul>
-                <li>Cada uno es un workflow aparte con su propio prompt y especialidad.</li>
-                <li>Hoy: mercado, copy, SEO, estrategia de medios y brief visual.</li>
-                <li>Reusables: el mismo worker sirve en varias campañas o equipos.</li>
-                <li>Extensible: duplicas uno y creas «finanzas», «legal», «soporte», etc.</li>
-              </ul>
-            </div>
-          </div>
-          <p style={{ textAlign: "center", color: "var(--muted)", fontSize: 14, marginTop: 18, maxWidth: 720, marginInline: "auto" }}>
-            Importa el orquestador y sus workers, reasigna cada nodo «Llamar worker» al
-            workflow correspondiente y listo. Para sumar un especialista nuevo, duplicas un
-            worker, le cambias el prompt y lo enganchas.
-          </p>
-        </div>
-      </section>
-
-      {/* PATRONES DE ARQUITECTURA */}
-      <section id="patrones" style={{ background: "#fff", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
-        <div className="container">
-          <div className="section-head">
-            <div className="kicker">Patrones · Arquitectura multi-agente</div>
-            <h2>Los moldes de cómo conectar agentes entre sí</h2>
-            <p>
-              No son workflows de negocio — son los patrones de orquestación reutilizables.
-              Cada uno resuelve un problema de arquitectura distinto. Descárgalos, sustituye
-              los prompts y arma cualquier proceso con la misma base.
-            </p>
-          </div>
-
-          <div className="patron-grid">
-            {PATTERNS.map((w) => (
-              <WorkflowCard key={w.key} w={w} />
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* CATALOG — interactive client component */}
+      <WorkflowsClient />
 
       {/* SEGURIDAD DE KEYS */}
       <section id="seguridad" style={{ background: "var(--bg)", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>

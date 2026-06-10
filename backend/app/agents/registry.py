@@ -26,6 +26,7 @@ def build_agent(
     limits: LimitsService,
     tools: Optional[dict[str, Tool]] = None,
     memory: Optional[Memory] = None,
+    billing=None,
     mock_tools: bool = True,
 ) -> Agent:
     """Construye un agente por su key, armando sus tools si no se pasan."""
@@ -34,4 +35,4 @@ def build_agent(
     cls = AGENT_CLASSES[key]
     if tools is None:
         tools = build_tools(cls.spec.tools, mock=mock_tools)
-    return cls(llm=llm, tools=tools, limits=limits, memory=memory)
+    return cls(llm=llm, tools=tools, limits=limits, memory=memory, billing=billing)

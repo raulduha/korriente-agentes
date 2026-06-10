@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Korriente — Agentes de IA para PyMEs",
+  title: "Korriente Agentes — Agentes de IA para PyMEs chilenas",
   description:
     "Agentes de IA que responden tus leads y cobran tus facturas, 24/7, con costo bajo control. Para PyMEs chilenas.",
 };
@@ -15,10 +15,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <nav className="nav">
           <div className="container nav-inner">
             <Link href="/" className="logo">
-              KORR<b>IENTE</b>
+              KORRIENTE <b>AGENTES</b>
             </Link>
             <div className="nav-links">
-              <a href="/#como-funciona">Cómo funciona</a>
+              <Link href="/como-funciona">Cómo funciona</Link>
+              <Link href="/modelo-negocio">Modelo</Link>
               <a href="/#demo">Demo</a>
               <a href="/#precios">Precios</a>
               <Link href="/workflows">Workflows</Link>
@@ -33,7 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <main>{children}</main>
         <footer className="footer">
           <div className="container" style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", width: "100%" }}>
-            <span className="logo">KORR<b>IENTE</b></span>
+            <span className="logo">KORRIENTE <b>AGENTES</b></span>
             <span>Agentes de IA que generan resultados medibles · Chile 2026</span>
             <span style={{ marginLeft: "auto" }}>Datos tratados según Ley 19.628</span>
           </div>

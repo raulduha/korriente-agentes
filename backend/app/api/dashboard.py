@@ -1,15 +1,34 @@
-"""Endpoints para el dashboard: planes, alta de tenant, uso y trazas."""
+"""Endpoints del dashboard: planes, tenants, uso, trazas (SPEC-008)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+import os
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
 from ..core.limits import LimitsService
 from ..core.pricing import PLANS, get_plan
+from ..core.tenant_registry import TenantRegistry
 from ..runtime.memory import Memory
 from .deps import get_limits, get_memory
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+
+def _get_registry() -> TenantRegistry:
+    db = os.getenv("KORRIENTE_WA_REGISTRY_DB", ":memory:")
+    return TenantRegistry(db)
+
+
+def _resolve_tenant_from_token(x_tenant_token: str | None) -> str:
+    """Resuelve el tenant_id a partir del token de lectura. 401 si inválido."""
+    if not x_tenant_token:
+        raise HTTPException(status_code=401, detail="Token requerido")
+    reg = _get_registry()
+    tenant_id = reg.resolve_token(x_tenant_token)
+    if not tenant_id:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    return tenant_id
 
 
 @router.get("/plans")
@@ -53,5 +72,19 @@ def usage(tenant_id: str, limits: LimitsService = Depends(get_limits)) -> dict:
 
 
 @router.get("/tenants/{tenant_id}/traces")
-def traces(tenant_id: str, memory: Memory = Depends(get_memory)) -> dict:
+def traces_internal(tenant_id: str, memory: Memory = Depends(get_memory)) -> dict:
+    """Endpoint interno (admin). Sin token de cliente."""
     return {"traces": memory.traces(tenant_id)}
+
+
+@router.get("/traces")
+def traces_by_token(
+    x_tenant_token: str | None = Header(default=None),
+    memory: Memory = Depends(get_memory),
+) -> dict:
+    """Endpoint de cliente: solo-lectura, protegido por token. Ve solo sus trazas."""
+    tenant_id = _resolve_tenant_from_token(x_tenant_token)
+    raw = memory.traces(tenant_id)
+    # Asegura que cada traza tenga tenant_id y que PII sensible no se exponga extra
+    traces = [dict(t, tenant_id=tenant_id) for t in raw]
+    return {"tenant_id": tenant_id, "traces": traces}

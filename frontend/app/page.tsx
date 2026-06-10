@@ -1,4 +1,5 @@
 import LiveDemo from "@/components/LiveDemo";
+import PricingTabs from "@/app/components/PricingTabs";
 import { PLANS_FALLBACK } from "@/lib/plans";
 import { clp } from "@/lib/format";
 
@@ -95,6 +96,131 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* AGENTES CON VOZ */}
+      <section id="voz">
+        <div className="container">
+          <div className="section-head">
+            <div className="kicker">Agentes con voz · Llamadas reales</div>
+            <h2>El cliente habla normal — sin menús, sin "marque 1 para ventas"</h2>
+            <p>
+              No es un IVR. El agente entiende lo que dice el cliente en lenguaje natural, responde
+              con voz humana (≈ 1 segundo de latencia) y resuelve o escala según el caso.
+              Funciona con llamadas entrantes y salientes.
+            </p>
+          </div>
+
+          {/* Casos de uso */}
+          <div className="feature-grid" style={{ marginBottom: 36 }}>
+            <div className="feature">
+              <h3>📅 Recepción y agenda</h3>
+              <p>Responde llamadas 24/7, da información de horarios y precios, y agenda citas directo en Google Calendar o tu sistema de turnos.</p>
+            </div>
+            <div className="feature">
+              <h3>📞 Seguimiento de leads</h3>
+              <p>Llama al lead a los 30 segundos de que llena un formulario web. Lo califica y agenda una reunión con tu equipo — cuando el interés es máximo.</p>
+            </div>
+            <div className="feature">
+              <h3>💰 Recordatorio de cobro</h3>
+              <p>Llama a clientes con facturas vencidas, negocia una fecha de pago y registra el acuerdo. Sin tensión: voz amable, sin presión.</p>
+            </div>
+            <div className="feature">
+              <h3>✅ Confirmación de pedidos</h3>
+              <p>Llama antes del despacho para confirmar dirección y horario. Reduce devoluciones y mejora la experiencia sin agregar personal.</p>
+            </div>
+          </div>
+
+          {/* Stack técnico */}
+          <div className="voice-stack-wrap">
+            <h3 className="voice-stack-title">Cómo funciona por dentro</h3>
+            <div className="voice-stack">
+              <div className="vstack-node vstack-trigger">
+                <div className="vstack-ico">📞</div>
+                <div className="vstack-label">Llamada</div>
+                <div className="vstack-sub">Twilio · número DID</div>
+              </div>
+              <div className="vstack-arrow">→</div>
+              <div className="vstack-node vstack-stt">
+                <div className="vstack-ico">🎙️</div>
+                <div className="vstack-label">Transcripción</div>
+                <div className="vstack-sub">Deepgram Nova-3 · español</div>
+              </div>
+              <div className="vstack-arrow">→</div>
+              <div className="vstack-node vstack-llm">
+                <div className="vstack-ico">🤖</div>
+                <div className="vstack-label">Razonamiento</div>
+                <div className="vstack-sub">Claude Haiku · contexto</div>
+              </div>
+              <div className="vstack-arrow">→</div>
+              <div className="vstack-node vstack-tts">
+                <div className="vstack-ico">🔊</div>
+                <div className="vstack-label">Voz natural</div>
+                <div className="vstack-sub">ElevenLabs · latencia 75 ms</div>
+              </div>
+              <div className="vstack-arrow">→</div>
+              <div className="vstack-node vstack-n8n">
+                <div className="vstack-ico">⚙️</div>
+                <div className="vstack-label">Post-llamada</div>
+                <div className="vstack-sub">n8n · CRM + alerta</div>
+              </div>
+            </div>
+            <p className="voice-stack-note">
+              Plataforma de orquestación: <strong>Retell AI</strong> o <strong>Vapi</strong> — ambas tienen integración nativa con n8n vía webhook.
+              El agente puede colgar, escalar la llamada a un humano o disparar una acción (enviar un mail, registrar en CRM, agendar en calendario) al terminar.
+            </p>
+          </div>
+
+          {/* Costos reales */}
+          <h3 style={{ marginTop: 36, marginBottom: 12, fontSize: 17 }}>Costos reales por minuto de llamada</h3>
+          <div style={{ overflowX: "auto" }}>
+            <table className="ptable" style={{ marginBottom: 10 }}>
+              <thead>
+                <tr>
+                  <th>Componente</th>
+                  <th>Costo / min</th>
+                  <th>Qué hace</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Plataforma — Retell AI</td>
+                  <td><b>US$0,07</b></td>
+                  <td style={{ color: "var(--muted)" }}>Orquesta STT + LLM + TTS en tiempo real con latencia &lt;1,5 s</td>
+                </tr>
+                <tr>
+                  <td>Transcripción — Deepgram Nova-3</td>
+                  <td><b>US$0,008</b></td>
+                  <td style={{ color: "var(--muted)" }}>Speech-to-text en español, streaming en tiempo real</td>
+                </tr>
+                <tr>
+                  <td>IA — Claude Haiku</td>
+                  <td><b>US$0,003</b></td>
+                  <td style={{ color: "var(--muted)" }}>Entiende intención, mantiene contexto, decide acción</td>
+                </tr>
+                <tr>
+                  <td>Voz — ElevenLabs Multilingual v2</td>
+                  <td><b>US$0,04</b></td>
+                  <td style={{ color: "var(--muted)" }}>Voz humana en español de Chile, 75 ms de latencia</td>
+                </tr>
+                <tr>
+                  <td>Telefonía — Twilio</td>
+                  <td><b>US$0,015</b></td>
+                  <td style={{ color: "var(--muted)" }}>Número DID + minuto de llamada inbound/outbound</td>
+                </tr>
+                <tr style={{ background: "var(--brand-soft)" }}>
+                  <td><b>Total estimado</b></td>
+                  <td><b>≈ US$0,14 / min</b></td>
+                  <td style={{ color: "var(--muted)" }}>200 llamadas × 4 min ≈ <b>US$112 / mes</b> (≈ CLP 105.000)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 0 }}>
+            Referencia: un agente humano atendiendo esas mismas 800 min/mes cuesta ≈ CLP 250.000–350.000/mes solo en sueldo,
+            sin contar capacitación ni disponibilidad 24/7. Precios Retell/Deepgram/ElevenLabs a junio 2026 — confirmar en cada plataforma.
+          </p>
+        </div>
+      </section>
+
       {/* PRECIOS */}
       <section id="precios">
         <div className="container">
@@ -123,6 +249,18 @@ export default function Landing() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* PROCESO + PAGOS */}
+      <section style={{ background: "#fff", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
+        <div className="container">
+          <div className="section-head">
+            <div className="kicker">Transparencia total</div>
+            <h2>Cómo es contratar y cómo se manejan los pagos</h2>
+            <p>Sin letra chica, sin sorpresas. Esto es exactamente lo que ocurre de principio a fin.</p>
+          </div>
+          <PricingTabs />
         </div>
       </section>
 

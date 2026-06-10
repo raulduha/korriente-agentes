@@ -1,6 +1,6 @@
 # SPEC-005: Conector WhatsApp real (360dialog) — webhook entrante + envío
 
-- **Estado**: borrador
+- **Estado**: implementada
 - **Autor**: Korriente
 - **Fecha**: 2026-06
 - **Caso de éxito base (Playbook)**: primer cliente real de M1. El agente
