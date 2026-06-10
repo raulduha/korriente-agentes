@@ -29,14 +29,14 @@ Leyenda de estado: ✅ construido · 🟡 prioridad alta · ⚪ backlog.
 |--------|----------|---------|--------|--------|
 | **Cobranza y recordatorios** | Recordatorios cordiales, escala montos altos. | % pagado a tiempo | haiku | ✅ |
 | **Conciliador de pagos** | Cruza pagos recibidos con facturas, marca diferencias. | Horas de conciliación ahorradas | haiku | ⚪ |
-| **Generador de cotizaciones** | Arma cotización desde una conversación + lista de precios. | Tiempo por cotización | sonnet | 🟡 |
+| **Generador de cotizaciones** | Arma cotización desde una conversación + lista de precios. | Tiempo por cotización | sonnet | ✅ |
 | **Seguimiento de despacho** | Notifica estado de pedido/orden y resuelve dudas de tracking. | Tickets de "¿dónde está mi pedido?" | haiku | ⚪ |
 | **Alertas de stock** | Avisa quiebres/sobre-stock y sugiere reposición. | Quiebres evitados | mini | ⚪ |
 
 ### Soporte y posventa
 | Agente | Qué hace | Métrica | Modelo | Estado |
 |--------|----------|---------|--------|--------|
-| **Triage de tickets** | Clasifica urgencia y área, enruta o escala. | Tiempo de primera respuesta | haiku | 🟡 |
+| **Triage de tickets** | Clasifica urgencia y área, enruta o escala. | Tiempo de primera respuesta | haiku | ✅ |
 | **Soporte N1 con RAG** | Resuelve dudas comunes desde la base de conocimiento. | % autoservicio | haiku + embeddings | ⚪ |
 | **Encuestas NPS** | Pide feedback post-atención y resume el sentimiento. | Respuesta a encuestas | mini | ⚪ |
 
@@ -52,6 +52,8 @@ Leyenda de estado: ✅ construido · 🟡 prioridad alta · ⚪ backlog.
 | **Análisis de mercado** (worker) | Segmentos, competidores, tendencias, oportunidades. | — | haiku | ✅ |
 | **Copywriter** (worker) | Titulares, posts, asunto de email, CTA. | — | haiku | ✅ |
 | **SEO / keywords** (worker) | Keywords, meta tags, ideas de contenido. | — | haiku | ✅ |
+| **Estratega de medios** (worker) | Canales recomendados, distribución de presupuesto, métricas clave. | — | haiku | ✅ |
+| **Diseñador de brief** (worker) | Concepto creativo, paleta, brief para el diseñador. | — | haiku | ✅ |
 | **Calendario de redes** | Programa publicaciones de la semana por canal. | Consistencia de publicación | haiku | ⚪ |
 | **Analista de métricas** | Lee métricas y entrega un resumen accionable. | Tiempo de reporte | sonnet | ⚪ |
 
@@ -68,17 +70,17 @@ Leyenda de estado: ✅ construido · 🟡 prioridad alta · ⚪ backlog.
 Un **orquestador** coordina; cada **worker** es experto en una tarea. Esto escala
 construyendo equipos por departamento.
 
-### 2.1 Equipo de Marketing ✅ (base) → 🟡 (ampliado)
-Construido: mercado + copy + SEO + síntesis. Ampliación propuesta:
+### 2.1 Equipo de Marketing ✅ (5 workers)
+Construido: mercado + copy + SEO + estrategia de medios + brief visual, síntesis con sonnet.
 ```
                  ┌─────────────────────────┐
-   Objetivo ───▶ │   Orquestador Marketing │
+   Objetivo ───▶ │   Orquestador Marketing │  v1.1
                  └───────────┬─────────────┘
         ┌──────────┬─────────┼──────────┬───────────┐
         ▼          ▼         ▼          ▼           ▼
    Análisis    Copywriter   SEO     Estratega   Diseñador
    de mercado     ✅         ✅      de medios    de brief
-      ✅                              (⚪)         (⚪)
+      ✅                               ✅           ✅
         └──────────┴─────────┴──────────┴───────────┘
                             ▼
                    Síntesis → Plan ✅

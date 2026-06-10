@@ -3,12 +3,12 @@
   "meta": {
     "korriente": {
       "agente": "orquestador-marketing",
-      "version": "1.0.0",
-      "patron": "orquestador + workers especializados",
-      "workers": ["worker-analisis-mercado", "worker-copywriter", "worker-seo-keywords"],
+      "version": "1.1.0",
+      "patron": "orquestador + workers especializados (paralelo)",
+      "workers": ["worker-analisis-mercado", "worker-copywriter", "worker-seo-keywords", "worker-estratega-medios", "worker-disenador-brief"],
       "modelo_router": "claude-haiku-4-5 (barato, decide y reparte)",
       "modelo_sintesis": "claude-sonnet-4-6 (razonamiento, junta todo)",
-      "nota": "Importa tambien los 3 workers de la carpeta /workers y reasigna cada nodo 'Llamar worker' al workflow correspondiente."
+      "nota": "Importa tambien los 5 workers de la carpeta /workers y reasigna cada nodo 'Llamar worker' al workflow correspondiente."
     }
   },
   "nodes": [
@@ -18,7 +18,7 @@
       "name": "Probar manualmente",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [0, 400]
+      "position": [0, 580]
     },
     {
       "parameters": {
@@ -38,7 +38,7 @@
       "name": "Entrada (objetivo)",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [220, 400]
+      "position": [220, 580]
     },
     {
       "parameters": {
@@ -54,7 +54,7 @@
       "name": "Config (modelos)",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [440, 400]
+      "position": [440, 580]
     },
     {
       "parameters": {
@@ -71,27 +71,27 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: $('Config (modelos)').item.json.model_router, max_tokens: 700, system: 'Eres un orquestador de marketing. A partir del objetivo del cliente, redacta un brief breve y especifico para cada agente trabajador. Responde SOLO con JSON valido: {\\\"contexto\\\": \\\"...\\\", \\\"brief_mercado\\\": \\\"...\\\", \\\"brief_copy\\\": \\\"...\\\", \\\"brief_seo\\\": \\\"...\\\"}. Cada brief en 1-2 frases, en espanol de Chile.', messages: [ { role: 'user', content: $('Entrada (objetivo)').item.json.objetivo } ] }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config (modelos)').item.json.model_router, max_tokens: 900, system: 'Eres un orquestador de marketing. A partir del objetivo del cliente, redacta un brief breve y especifico para cada uno de los 5 agentes especialistas. Responde SOLO con JSON valido: {\\\"contexto\\\": \\\"...\\\", \\\"brief_mercado\\\": \\\"...\\\", \\\"brief_copy\\\": \\\"...\\\", \\\"brief_seo\\\": \\\"...\\\", \\\"brief_estrategia\\\": \\\"...\\\", \\\"brief_visual\\\": \\\"...\\\"}. Cada brief en 1-2 frases en espanol de Chile. brief_estrategia = canales y presupuesto sugerido. brief_visual = concepto y tono grafico.', messages: [ { role: 'user', content: $('Entrada (objetivo)').item.json.objetivo } ] }) }}",
         "options": {}
       },
       "id": "node-router",
       "name": "Router (reparte briefs)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 400],
+      "position": [660, 580],
       "credentials": {
         "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
       }
     },
     {
       "parameters": {
-        "jsCode": "// Parsea el plan del orquestador en briefs para cada worker.\nconst raw = $json.content?.[0]?.text || '{}';\nlet d;\ntry { d = JSON.parse(raw); } catch (e) { d = {}; }\nconst objetivo = $('Entrada (objetivo)').item.json.objetivo;\nreturn [{ json: {\n  objetivo,\n  contexto: d.contexto || objetivo,\n  brief_mercado: d.brief_mercado || objetivo,\n  brief_copy: d.brief_copy || objetivo,\n  brief_seo: d.brief_seo || objetivo\n} }];"
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d;\ntry { d = JSON.parse(raw); } catch (e) { d = {}; }\nconst objetivo = $('Entrada (objetivo)').item.json.objetivo;\nreturn [{ json: {\n  objetivo,\n  contexto: d.contexto || objetivo,\n  brief_mercado: d.brief_mercado || objetivo,\n  brief_copy: d.brief_copy || objetivo,\n  brief_seo: d.brief_seo || objetivo,\n  brief_estrategia: d.brief_estrategia || objetivo,\n  brief_visual: d.brief_visual || objetivo\n} }];"
       },
       "id": "node-briefs",
       "name": "Preparar briefs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 400]
+      "position": [880, 580]
     },
     {
       "parameters": {
@@ -148,22 +148,58 @@
       "notes": "Tras importar, reasigna a 'worker-seo-keywords'."
     },
     {
-      "parameters": { "numberInputs": 3 },
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REEMPLAZAR_worker_estrategia",
+          "mode": "list",
+          "cachedResultName": "Korriente · Worker Estratega de medios"
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "id": "node-w4",
+      "name": "Llamar worker: Estrategia",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1120, 760],
+      "notes": "Tras importar, reasigna a 'worker-estratega-medios'."
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REEMPLAZAR_worker_brief",
+          "mode": "list",
+          "cachedResultName": "Korriente · Worker Disenador de brief"
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "id": "node-w5",
+      "name": "Llamar worker: Brief visual",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1120, 940],
+      "notes": "Tras importar, reasigna a 'worker-disenador-brief'."
+    },
+    {
+      "parameters": { "numberInputs": 5 },
       "id": "node-merge",
       "name": "Juntar resultados",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [1360, 400]
+      "position": [1400, 580]
     },
     {
       "parameters": {
-        "jsCode": "// Junta la salida de los 3 workers en un solo objeto.\nconst items = $input.all();\nconst out = { workers: {} };\nfor (const it of items) {\n  const w = it.json.worker || 'desconocido';\n  out.workers[w] = it.json.resultado ?? it.json;\n}\nout.objetivo = $('Preparar briefs').first().json.objetivo;\nreturn [{ json: out }];"
+        "jsCode": "const items = $input.all();\nconst out = { workers: {} };\nfor (const it of items) {\n  const w = it.json.worker || 'desconocido';\n  out.workers[w] = it.json.resultado ?? it.json;\n}\nout.objetivo = $('Preparar briefs').first().json.objetivo;\nreturn [{ json: out }];"
       },
       "id": "node-aggr",
       "name": "Consolidar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1580, 400]
+      "position": [1620, 580]
     },
     {
       "parameters": {
@@ -180,14 +216,14 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: $('Config (modelos)').item.json.model_sintesis, max_tokens: 1500, system: 'Eres un director de marketing. Te paso el objetivo y los resultados de tres especialistas (analisis de mercado, copywriting y SEO). Entrega un plan de campana accionable y ordenado en markdown, en espanol de Chile: 1) resumen, 2) segmentos y angulo, 3) mensajes/copys recomendados, 4) keywords y SEO, 5) siguientes pasos.', messages: [ { role: 'user', content: JSON.stringify($json) } ] }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config (modelos)').item.json.model_sintesis, max_tokens: 1800, system: 'Eres un director de marketing. Recibes el objetivo y los resultados de cinco especialistas: analisis de mercado, copywriting, SEO, estrategia de medios y brief visual/creativo. Entrega un plan de campana accionable y ordenado en markdown, en espanol de Chile: 1) Resumen ejecutivo, 2) Segmentos y angulo clave, 3) Mensajes y copys recomendados, 4) Keywords y SEO, 5) Canales y distribucion de presupuesto, 6) Concepto creativo y brief visual, 7) Siguientes pasos (checklist). Se concreto y orientado a la accion.', messages: [ { role: 'user', content: JSON.stringify($json) } ] }) }}",
         "options": {}
       },
       "id": "node-sintesis",
       "name": "Sintetizar plan (LLM)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1800, 400],
+      "position": [1840, 580],
       "credentials": {
         "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
       }
@@ -205,7 +241,7 @@
       "name": "Plan final",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [2020, 400]
+      "position": [2060, 580]
     }
   ],
   "connections": {
@@ -217,12 +253,16 @@
       "main": [[
         { "node": "Llamar worker: Mercado", "type": "main", "index": 0 },
         { "node": "Llamar worker: Copy", "type": "main", "index": 0 },
-        { "node": "Llamar worker: SEO", "type": "main", "index": 0 }
+        { "node": "Llamar worker: SEO", "type": "main", "index": 0 },
+        { "node": "Llamar worker: Estrategia", "type": "main", "index": 0 },
+        { "node": "Llamar worker: Brief visual", "type": "main", "index": 0 }
       ]]
     },
     "Llamar worker: Mercado": { "main": [[{ "node": "Juntar resultados", "type": "main", "index": 0 }]] },
     "Llamar worker: Copy": { "main": [[{ "node": "Juntar resultados", "type": "main", "index": 1 }]] },
     "Llamar worker: SEO": { "main": [[{ "node": "Juntar resultados", "type": "main", "index": 2 }]] },
+    "Llamar worker: Estrategia": { "main": [[{ "node": "Juntar resultados", "type": "main", "index": 3 }]] },
+    "Llamar worker: Brief visual": { "main": [[{ "node": "Juntar resultados", "type": "main", "index": 4 }]] },
     "Juntar resultados": { "main": [[{ "node": "Consolidar", "type": "main", "index": 0 }]] },
     "Consolidar": { "main": [[{ "node": "Sintetizar plan (LLM)", "type": "main", "index": 0 }]] },
     "Sintetizar plan (LLM)": { "main": [[{ "node": "Plan final", "type": "main", "index": 0 }]] }

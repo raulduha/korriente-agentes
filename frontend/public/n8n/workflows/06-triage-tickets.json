@@ -1,0 +1,181 @@
+{
+  "name": "Korriente · Triage de tickets",
+  "meta": {
+    "korriente": {
+      "agente": "triage-tickets",
+      "version": "1.0.0",
+      "spec": "specs/triage-tickets.md",
+      "patron": "agente individual — clasificacion + enrutamiento",
+      "metrica": "Tiempo de primera respuesta",
+      "hitl": "urgencia alta, sentimiento furioso, confianza < umbral, area legal"
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "path": "triage-ticket",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Ticket entrante",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "triage-ticket-01"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model", "value": "claude-haiku-4-5", "type": "string" },
+            { "id": "c2", "name": "umbral_confianza", "value": 0.5, "type": "number" },
+            {
+              "id": "c3",
+              "name": "system_prompt",
+              "value": "Clasifica este ticket de soporte para una PyME chilena. Devuelve urgencia (alta = sistema caido/perdida datos/fraude; media = afecta trabajo pero tiene workaround; baja = consulta o mejora), area (tecnico|facturacion|ventas|posventa|otro), sentimiento (neutro|molesto|furioso), resumen de 1 linea y confianza 0.0-1.0. Responde SOLO con JSON valido sin texto extra: {\"urgencia\": \"alta|media|baja\", \"area\": \"tecnico|facturacion|ventas|posventa|otro\", \"sentimiento\": \"neutro|molesto|furioso\", \"resumen\": \"...\", \"confianza\": 0.85, \"requiere_humano\": true}. Pon requiere_humano=true si urgencia=alta o sentimiento=furioso.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $('Config').item.json;\nconst raw = $('Ticket entrante').item.json;\nconst body = raw.body || raw;\nreturn [{ json: {\n  model: config.model,\n  umbral_confianza: config.umbral_confianza,\n  system_prompt: config.system_prompt,\n  nombre: body.nombre || 'cliente',\n  empresa: body.empresa || '',\n  mensaje: body.mensaje || body.text || '',\n  canal: body.canal || 'webhook',\n  ticket_id: body.ticket_id || ''\n} }];"
+      },
+      "id": "node-extract",
+      "name": "Extraer datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, max_tokens: 300, system: $json.system_prompt, messages: [{ role: 'user', content: 'Ticket de ' + $json.nombre + ' (' + $json.empresa + '):\\n' + $json.mensaje }] }) }}",
+        "options": {}
+      },
+      "id": "node-llm",
+      "name": "Clasificar (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $('Extraer datos').item.json;\nconst raw = $json.content?.[0]?.text || '{}';\nlet d;\ntry { d = JSON.parse(raw); } catch (e) {\n  d = { urgencia: 'media', area: 'otro', sentimiento: 'neutro', resumen: raw.slice(0, 80), confianza: 0.3, requiere_humano: true };\n}\nconst escalar = d.requiere_humano || d.urgencia === 'alta' || d.sentimiento === 'furioso' || d.confianza < datos.umbral_confianza;\nconst ticketId = datos.ticket_id || 'TKT-' + Date.now();\n// Enmascara empresa en log (minima exposicion de datos, Ley 19.628)\nconst logTag = datos.empresa ? datos.empresa.slice(0, 3) + '***' : 'N/A';\nreturn [{ json: {\n  ticket_id: ticketId,\n  nombre: datos.nombre,\n  empresa_log: logTag,\n  canal: datos.canal,\n  mensaje_original: datos.mensaje,\n  clasificacion: d,\n  escalar\n} }];"
+      },
+      "id": "node-parse",
+      "name": "Parsear + HITL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.escalar }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if",
+      "name": "¿Escalar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "e1", "name": "accion", "value": "escalar_humano", "type": "string" },
+            {
+              "id": "e2",
+              "name": "alerta",
+              "value": "={{ '[' + $json.clasificacion.urgencia.toUpperCase() + '] Ticket ' + $json.ticket_id + ' — Area: ' + $json.clasificacion.area + ' | Sentimiento: ' + $json.clasificacion.sentimiento + ' | ' + $json.clasificacion.resumen }}",
+              "type": "expression"
+            },
+            { "id": "e3", "name": "ticket_id", "value": "={{ $json.ticket_id }}", "type": "expression" },
+            { "id": "e4", "name": "clasificacion", "value": "={{ $json.clasificacion }}", "type": "expression" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-escala",
+      "name": "Escalar a humano",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1320, 160]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "accion", "value": "respuesta_automatica", "type": "string" },
+            {
+              "id": "a2",
+              "name": "mensaje_cliente",
+              "value": "={{ 'Hola ' + $json.nombre + ', recibimos tu solicitud. La clasificamos como area ' + $json.clasificacion.area + ' con prioridad ' + $json.clasificacion.urgencia + '. ' + ($json.clasificacion.urgencia === 'baja' ? 'La atenderemos en 24 horas habiles.' : 'La atenderemos dentro de 4 horas habiles.') + ' Tu numero de ticket es ' + $json.ticket_id + '.' }}",
+              "type": "expression"
+            },
+            { "id": "a3", "name": "ticket_id", "value": "={{ $json.ticket_id }}", "type": "expression" },
+            { "id": "a4", "name": "clasificacion", "value": "={{ $json.clasificacion }}", "type": "expression" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-auto",
+      "name": "Respuesta automatica",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1320, 440]
+    }
+  ],
+  "connections": {
+    "Ticket entrante": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Extraer datos", "type": "main", "index": 0 }]] },
+    "Extraer datos": { "main": [[{ "node": "Clasificar (LLM)", "type": "main", "index": 0 }]] },
+    "Clasificar (LLM)": { "main": [[{ "node": "Parsear + HITL", "type": "main", "index": 0 }]] },
+    "Parsear + HITL": { "main": [[{ "node": "¿Escalar?", "type": "main", "index": 0 }]] },
+    "¿Escalar?": {
+      "main": [
+        [{ "node": "Escalar a humano", "type": "main", "index": 0 }],
+        [{ "node": "Respuesta automatica", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "soporte" }, { "name": "triage" }]
+}

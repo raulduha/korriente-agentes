@@ -1,0 +1,186 @@
+{
+  "name": "Korriente · Generador de cotizaciones",
+  "meta": {
+    "korriente": {
+      "agente": "generador-cotizaciones",
+      "version": "1.0.0",
+      "spec": "specs/generador-cotizaciones.md",
+      "patron": "agente individual — comprension + estructura",
+      "metrica": "Tiempo de generacion de cotizacion",
+      "hitl": "items sin precio en lista, monto sobre umbral, condiciones especiales"
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "path": "generar-cotizacion",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Solicitud entrante",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "generador-cotizacion-01"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model", "value": "claude-sonnet-4-6", "type": "string" },
+            { "id": "c2", "name": "vigencia_dias", "value": 10, "type": "number" },
+            {
+              "id": "c3",
+              "name": "lista_precios_json",
+              "value": "{\"plan_starter\": {\"nombre\": \"Plan Starter\", \"precio_mensual\": 49900, \"descripcion\": \"Hasta 1 agente, 500 conversaciones/mes\"}, \"plan_growth\": {\"nombre\": \"Plan Growth\", \"precio_mensual\": 149900, \"descripcion\": \"Hasta 3 agentes, 2000 conversaciones/mes\"}, \"plan_pro\": {\"nombre\": \"Plan Pro\", \"precio_mensual\": 349900, \"descripcion\": \"Agentes ilimitados, 10000 conversaciones/mes\"}, \"implementacion\": {\"nombre\": \"Implementacion\", \"precio_unico\": 199900, \"descripcion\": \"Configuracion inicial + capacitacion\"}, \"soporte_premium\": {\"nombre\": \"Soporte Premium\", \"precio_mensual\": 79900, \"descripcion\": \"SLA 4h, canal prioritario\"}, \"capacitacion_extra\": {\"nombre\": \"Capacitacion adicional (hora)\", \"precio_hora\": 59900}}",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "system_prompt",
+              "value": "Eres un asistente comercial de una empresa chilena. Analiza la solicitud del cliente y genera una cotizacion estructurada usando la lista de precios. REGLAS: 1) Solo usa precios de la lista proporcionada. 2) Si un producto o servicio no esta en la lista, devuelvelo en 'items_sin_precio'. 3) NO inventes precios. 4) Los precios son en CLP (pesos chilenos). Responde SOLO con JSON valido: {\"asunto\": \"...\", \"nombre_cliente\": \"...\", \"empresa\": \"...\", \"items\": [{\"descripcion\": \"...\", \"cantidad\": 1, \"precio_unitario\": 0, \"subtotal\": 0}], \"total_mensual\": 0, \"total_unico\": 0, \"vigencia_dias\": 10, \"notas\": \"...\", \"items_sin_precio\": [\"...\"], \"siguiente_paso\": \"...\"}.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $('Config').item.json;\nconst raw = $('Solicitud entrante').item.json;\nconst body = raw.body || raw;\nreturn [{ json: {\n  model: config.model,\n  vigencia_dias: config.vigencia_dias,\n  lista_precios_json: config.lista_precios_json,\n  system_prompt: config.system_prompt,\n  nombre_cliente: body.nombre_cliente || body.nombre || 'cliente',\n  empresa: body.empresa || '',\n  mensaje_solicitud: body.mensaje_solicitud || body.mensaje || ''\n} }];"
+      },
+      "id": "node-extract",
+      "name": "Extraer datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, max_tokens: 1200, system: $json.system_prompt, messages: [{ role: 'user', content: 'Cliente: ' + $json.nombre_cliente + ' (' + $json.empresa + ')\\nSolicitud: ' + $json.mensaje_solicitud + '\\n\\nLista de precios disponible (JSON):\\n' + $json.lista_precios_json + '\\n\\nVigencia cotizacion: ' + $json.vigencia_dias + ' dias.' }] }) }}",
+        "options": {}
+      },
+      "id": "node-llm",
+      "name": "Generar cotizacion (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d;\ntry { d = JSON.parse(raw); } catch (e) {\n  d = { asunto: 'Cotizacion', nombre_cliente: 'cliente', empresa: '', items: [], total_mensual: 0, total_unico: 0, vigencia_dias: 10, notas: 'Error al generar, revisar manualmente.', items_sin_precio: ['todos'], siguiente_paso: 'Revisar con ejecutivo comercial' };\n}\nconst itemsSinPrecio = d.items_sin_precio || [];\nconst necesitaRevision = itemsSinPrecio.length > 0;\nreturn [{ json: {\n  cotizacion: d,\n  necesita_revision: necesitaRevision,\n  items_sin_precio: itemsSinPrecio\n} }];"
+      },
+      "id": "node-parse",
+      "name": "Parsear cotizacion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.necesita_revision }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if",
+      "name": "¿Necesita revision?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "h1", "name": "accion", "value": "hitl_revision_precios", "type": "string" },
+            {
+              "id": "h2",
+              "name": "alerta",
+              "value": "={{ 'Cotizacion para ' + $json.cotizacion.nombre_cliente + ' (' + $json.cotizacion.empresa + ') tiene ' + $json.items_sin_precio.length + ' items sin precio: ' + $json.items_sin_precio.join(', ') + '. Revisar antes de enviar.' }}",
+              "type": "expression"
+            },
+            { "id": "h3", "name": "cotizacion_borrador", "value": "={{ $json.cotizacion }}", "type": "expression" },
+            { "id": "h4", "name": "items_sin_precio", "value": "={{ $json.items_sin_precio }}", "type": "expression" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-hitl",
+      "name": "HITL — completar precios",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1320, 160]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "r1", "name": "accion", "value": "cotizacion_lista", "type": "string" },
+            {
+              "id": "r2",
+              "name": "mensaje",
+              "value": "={{ 'Cotizacion lista para ' + $json.cotizacion.nombre_cliente + '. Total mensual: $' + $json.cotizacion.total_mensual.toLocaleString('es-CL') + ' CLP. Vigencia: ' + $json.cotizacion.vigencia_dias + ' dias.' }}",
+              "type": "expression"
+            },
+            { "id": "r3", "name": "cotizacion", "value": "={{ $json.cotizacion }}", "type": "expression" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-lista",
+      "name": "Cotizacion lista",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1320, 440]
+    }
+  ],
+  "connections": {
+    "Solicitud entrante": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Extraer datos", "type": "main", "index": 0 }]] },
+    "Extraer datos": { "main": [[{ "node": "Generar cotizacion (LLM)", "type": "main", "index": 0 }]] },
+    "Generar cotizacion (LLM)": { "main": [[{ "node": "Parsear cotizacion", "type": "main", "index": 0 }]] },
+    "Parsear cotizacion": { "main": [[{ "node": "¿Necesita revision?", "type": "main", "index": 0 }]] },
+    "¿Necesita revision?": {
+      "main": [
+        [{ "node": "HITL — completar precios", "type": "main", "index": 0 }],
+        [{ "node": "Cotizacion lista", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "ventas" }, { "name": "cotizaciones" }]
+}
