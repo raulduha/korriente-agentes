@@ -189,6 +189,16 @@ section { padding: 56px 0; }
 .wf-extra-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13.5px; padding: 5px 0; color: var(--muted); }
 .dl-link { font-weight: 700; color: var(--brand-ink); font-size: 13px; }
 .dl-link:hover { text-decoration: underline; }
+.wf-who { list-style: none; padding: 0; margin: 0; }
+.wf-who li { padding: 4px 0 4px 20px; position: relative; font-size: 14px; color: var(--muted); }
+.wf-who li::before { content: "✓"; position: absolute; left: 0; color: var(--brand); font-weight: 700; }
+.wf-how-to { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.wf-how-to summary { cursor: pointer; padding: 10px 14px; font-size: 13.5px; font-weight: 600; background: var(--bg); list-style: none; user-select: none; }
+.wf-how-to summary::-webkit-details-marker { display: none; }
+.wf-how-to[open] summary { border-bottom: 1px solid var(--line); }
+.wf-steps-list { margin: 0; padding: 14px 14px 14px 28px; font-size: 13.5px; color: var(--muted); display: flex; flex-direction: column; gap: 8px; }
+.wf-steps-list li { padding-left: 4px; line-height: 1.5; }
+.patron-grid { display: flex; flex-direction: column; gap: 0; }
 .codebox { background: var(--ink); color: #e6ebf2; border-radius: 12px; padding: 16px 18px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; overflow-x: auto; line-height: 1.7; max-width: 820px; margin: 0 auto; }
 .codebox .c { color: #7d8aa0; }
 .ptable { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; font-size: 14px; }

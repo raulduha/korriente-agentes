@@ -1,0 +1,260 @@
+{
+  "name": "Korriente · Patrón Generador + Crítico",
+  "meta": {
+    "korriente": {
+      "agente": "patron-generador-critico",
+      "version": "1.0.0",
+      "patron": "un agente genera, otro critica y pide mejoras — hasta 2 iteraciones",
+      "cuando_usar": "Copys, propuestas, documentos, respuestas donde la calidad importa. El critico actua como editor y eleva el nivel sin intervencion humana en cada vuelta.",
+      "costo": "2-4 llamadas LLM (generador + critico por iteracion). Usar solo cuando la mejora de calidad justifica el costo extra."
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-manual",
+      "name": "Brief entrante",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model_generador", "value": "claude-haiku-4-5", "type": "string" },
+            { "id": "c2", "name": "model_critico", "value": "claude-sonnet-4-6", "type": "string" },
+            { "id": "c3", "name": "brief", "value": "REEMPLAZAR: descripcion del contenido a generar (ej: email de lanzamiento para PyME contable)", "type": "string" },
+            { "id": "c4", "name": "criterios_calidad", "value": "REEMPLAZAR: criterios que debe cumplir (ej: tono cercano, maximo 150 palabras, incluir CTA claro, en espanol de Chile)", "type": "string" },
+            { "id": "c5", "name": "puntaje_minimo", "value": 7, "type": "number" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model_generador, max_tokens: 600, system: 'Eres un especialista en copywriting para PyMEs chilenas. Genera el contenido solicitado siguiendo el brief con exactitud. Devuelve SOLO JSON valido: {\"contenido\": \"...\", \"notas\": \"...\"}', messages: [{ role: 'user', content: 'Brief: ' + $('Config').item.json.brief + '\\nCriterios de calidad a cumplir: ' + $('Config').item.json.criterios_calidad }] }) }}",
+        "options": {}
+      },
+      "id": "node-gen1",
+      "name": "Generar (1ª vez)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 400],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d; try { d = JSON.parse(raw); } catch(e) { d = { contenido: raw, notas: '' }; }\nreturn [{ json: { generado_v1: d.contenido, notas_v1: d.notas } }];"
+      },
+      "id": "node-parse-gen1",
+      "name": "Parsear generado v1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model_critico, max_tokens: 400, system: 'Eres un editor critico experto. Evalua el contenido contra los criterios y dale un puntaje del 1 al 10. Se exigente: un 7 significa que cumple todos los criterios basicos. Devuelve SOLO JSON valido: {\"puntaje\": 8, \"aprobado\": true, \"fortalezas\": [\"...\"], \"mejoras_concretas\": [\"...\"]}. aprobado=true si puntaje >= ' + $('Config').item.json.puntaje_minimo, messages: [{ role: 'user', content: 'Criterios: ' + $('Config').item.json.criterios_calidad + '\\n\\nContenido a evaluar:\\n' + $json.generado_v1 }] }) }}",
+        "options": {}
+      },
+      "id": "node-critico1",
+      "name": "Critico: Evaluar (1ª)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 400],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet c; try { c = JSON.parse(raw); } catch(e) { c = { puntaje: 0, aprobado: false, fortalezas: [], mejoras_concretas: ['parse error'] }; }\nreturn [{ json: { critica_1: c, generado_v1: $('Parsear generado v1').item.json.generado_v1 } }];"
+      },
+      "id": "node-parse-critica1",
+      "name": "Parsear critica 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "c1", "leftValue": "={{ $json.critica_1.aprobado }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if1",
+      "name": "¿Aprobado en 1ª?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1320, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "o1", "name": "contenido_final", "value": "={{ $json.generado_v1 }}", "type": "expression" },
+            { "id": "o2", "name": "puntaje_final", "value": "={{ $json.critica_1.puntaje }}", "type": "expression" },
+            { "id": "o3", "name": "iteraciones", "value": 1, "type": "number" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-out1",
+      "name": "Contenido final (1ª iter)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1540, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model_generador, max_tokens: 600, system: 'Eres un copywriter. Tu version anterior fue evaluada y necesita mejoras especificas. Reescribela incorporando el feedback. Devuelve SOLO JSON valido: {\"contenido\": \"...\", \"cambios_realizados\": [\"...\"]}', messages: [{ role: 'user', content: 'Version anterior:\\n' + $json.generado_v1 + '\\n\\nFeedback del editor:\\n- Mejoras requeridas: ' + ($json.critica_1.mejoras_concretas || []).join(', ') + '\\n\\nBrief original: ' + $('Config').item.json.brief }] }) }}",
+        "options": {}
+      },
+      "id": "node-gen2",
+      "name": "Generar (2ª con feedback)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 580],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d; try { d = JSON.parse(raw); } catch(e) { d = { contenido: raw, cambios_realizados: [] }; }\nreturn [{ json: { generado_v2: d.contenido, cambios_v2: d.cambios_realizados } }];"
+      },
+      "id": "node-parse-gen2",
+      "name": "Parsear generado v2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 580]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model_critico, max_tokens: 400, system: 'Eres un editor critico. Esta es la segunda y ultima revision. Evalua el contenido mejorado. Devuelve SOLO JSON valido: {\"puntaje\": 9, \"aprobado\": true, \"evaluacion_final\": \"...\"}. aprobado=true si puntaje >= ' + $('Config').item.json.puntaje_minimo, messages: [{ role: 'user', content: 'Criterios: ' + $('Config').item.json.criterios_calidad + '\\n\\nContenido mejorado:\\n' + $json.generado_v2 }] }) }}",
+        "options": {}
+      },
+      "id": "node-critico2",
+      "name": "Critico: Evaluar (2ª)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 580],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet c; try { c = JSON.parse(raw); } catch(e) { c = { puntaje: 0, aprobado: false, evaluacion_final: 'parse error' }; }\nreturn [{ json: { critica_2: c, generado_v2: $('Parsear generado v2').item.json.generado_v2 } }];"
+      },
+      "id": "node-parse-critica2",
+      "name": "Parsear critica 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 580]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "o1", "name": "contenido_final", "value": "={{ $json.generado_v2 }}", "type": "expression" },
+            { "id": "o2", "name": "puntaje_final", "value": "={{ $json.critica_2.puntaje }}", "type": "expression" },
+            { "id": "o3", "name": "iteraciones", "value": 2, "type": "number" },
+            { "id": "o4", "name": "nota", "value": "={{ $json.critica_2.aprobado ? 'Aprobado en 2a iteracion' : 'Tope alcanzado — mejor version disponible' }}", "type": "expression" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-out2",
+      "name": "Contenido final (2ª iter / mejor version)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2420, 580]
+    }
+  ],
+  "connections": {
+    "Brief entrante": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Generar (1ª vez)", "type": "main", "index": 0 }]] },
+    "Generar (1ª vez)": { "main": [[{ "node": "Parsear generado v1", "type": "main", "index": 0 }]] },
+    "Parsear generado v1": { "main": [[{ "node": "Critico: Evaluar (1ª)", "type": "main", "index": 0 }]] },
+    "Critico: Evaluar (1ª)": { "main": [[{ "node": "Parsear critica 1", "type": "main", "index": 0 }]] },
+    "Parsear critica 1": { "main": [[{ "node": "¿Aprobado en 1ª?", "type": "main", "index": 0 }]] },
+    "¿Aprobado en 1ª?": {
+      "main": [
+        [{ "node": "Contenido final (1ª iter)", "type": "main", "index": 0 }],
+        [{ "node": "Generar (2ª con feedback)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Generar (2ª con feedback)": { "main": [[{ "node": "Parsear generado v2", "type": "main", "index": 0 }]] },
+    "Parsear generado v2": { "main": [[{ "node": "Critico: Evaluar (2ª)", "type": "main", "index": 0 }]] },
+    "Critico: Evaluar (2ª)": { "main": [[{ "node": "Parsear critica 2", "type": "main", "index": 0 }]] },
+    "Parsear critica 2": { "main": [[{ "node": "Contenido final (2ª iter / mejor version)", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "patron" }, { "name": "generador-critico" }]
+}

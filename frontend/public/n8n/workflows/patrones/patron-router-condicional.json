@@ -1,0 +1,259 @@
+{
+  "name": "Korriente · Patrón Router Condicional",
+  "meta": {
+    "korriente": {
+      "agente": "patron-router-condicional",
+      "version": "1.0.0",
+      "patron": "router que clasifica y llama SOLO al handler que aplica",
+      "cuando_usar": "Cuando hay multiples tipos de solicitudes y cada una necesita un tratamiento diferente. Ahorra costo vs. llamar a todos los workers siempre.",
+      "costo": "1 llamada para clasificar + 1 llamada para el handler elegido = 2 LLM calls total (vs N si llamaras a todos)"
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "path": "router-condicional",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Solicitud entrante",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 400],
+      "webhookId": "router-condicional-01"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model_router", "value": "claude-haiku-4-5", "type": "string" },
+            { "id": "c2", "name": "model_handler", "value": "claude-haiku-4-5", "type": "string" },
+            {
+              "id": "c3",
+              "name": "tipos_disponibles",
+              "value": "soporte_tecnico|consulta_comercial|reclamo|otro",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "descripcion_tipos",
+              "value": "soporte_tecnico=problema con el sistema o producto; consulta_comercial=pregunta sobre precios o planes; reclamo=queja o insatisfaccion; otro=no encaja en ninguna",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $('Config').item.json;\nconst raw = $('Solicitud entrante').item.json;\nconst body = raw.body || raw;\nreturn [{ json: {\n  model_router: config.model_router,\n  model_handler: config.model_handler,\n  tipos_disponibles: config.tipos_disponibles,\n  descripcion_tipos: config.descripcion_tipos,\n  mensaje: body.mensaje || body.text || '',\n  nombre: body.nombre || 'cliente',\n  empresa: body.empresa || ''\n} }];"
+      },
+      "id": "node-extract",
+      "name": "Extraer datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model_router, max_tokens: 100, system: 'Clasifica la solicitud del cliente en exactamente uno de estos tipos: ' + $json.tipos_disponibles + '. Descripcion de cada tipo: ' + $json.descripcion_tipos + '. Devuelve SOLO JSON valido: {\"tipo\": \"soporte_tecnico\", \"confianza\": 0.9}', messages: [{ role: 'user', content: $json.nombre + ': ' + $json.mensaje }] }) }}",
+        "options": {}
+      },
+      "id": "node-router-llm",
+      "name": "Router: Clasificar (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 400],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d; try { d = JSON.parse(raw); } catch(e) { d = { tipo: 'otro', confianza: 0.3 }; }\nconst datos = $('Extraer datos').item.json;\nreturn [{ json: { tipo: d.tipo || 'otro', confianza: d.confianza || 0, ...datos } }];"
+      },
+      "id": "node-parse-tipo",
+      "name": "Parsear tipo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "options": { "fallbackOutput": "extra" },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.tipo }}", "rightValue": "soporte_tecnico", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Soporte tecnico"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.tipo }}", "rightValue": "consulta_comercial", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Consulta comercial"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.tipo }}", "rightValue": "reclamo", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Reclamo"
+            }
+          ]
+        }
+      },
+      "id": "node-switch",
+      "name": "Enrutar por tipo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model_handler, max_tokens: 400, system: 'Eres un especialista de soporte tecnico para una PyME chilena. Responde de forma clara y tecnica. Si el problema requiere acceso al sistema, indica que un tecnico tomara contacto en 2h. Tono profesional y directo.', messages: [{ role: 'user', content: $json.mensaje }] }) }}",
+        "options": {}
+      },
+      "id": "node-handler-soporte",
+      "name": "Handler: Soporte tecnico",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 180],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model_handler, max_tokens: 400, system: 'Eres un ejecutivo comercial de una PyME chilena. Responde consultas sobre precios, planes y servicios. Si la consulta es muy especifica, ofrece agendar una llamada. Tono amable y orientado a cerrar.', messages: [{ role: 'user', content: $json.mensaje }] }) }}",
+        "options": {}
+      },
+      "id": "node-handler-comercial",
+      "name": "Handler: Consulta comercial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 400],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model_handler, max_tokens: 400, system: 'Eres un ejecutivo de posventa. El cliente esta disconforme. Responde con empatia genuina, reconoce la incomodidad sin justificar, y ofrece una solucion concreta o escala a un supervisor. Tono humano, nunca defensivo.', messages: [{ role: 'user', content: $json.mensaje }] }) }}",
+        "options": {}
+      },
+      "id": "node-handler-reclamo",
+      "name": "Handler: Reclamo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 620],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "d1", "name": "accion", "value": "derivar_a_humano", "type": "string" },
+            { "id": "d2", "name": "mensaje", "value": "={{ 'Solicitud no clasificada de ' + $json.nombre + ': ' + $json.mensaje }}", "type": "expression" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-handler-default",
+      "name": "Handler: Default / HITL",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1360, 840]
+    }
+  ],
+  "connections": {
+    "Solicitud entrante": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Extraer datos", "type": "main", "index": 0 }]] },
+    "Extraer datos": { "main": [[{ "node": "Router: Clasificar (LLM)", "type": "main", "index": 0 }]] },
+    "Router: Clasificar (LLM)": { "main": [[{ "node": "Parsear tipo", "type": "main", "index": 0 }]] },
+    "Parsear tipo": { "main": [[{ "node": "Enrutar por tipo", "type": "main", "index": 0 }]] },
+    "Enrutar por tipo": {
+      "main": [
+        [{ "node": "Handler: Soporte tecnico", "type": "main", "index": 0 }],
+        [{ "node": "Handler: Consulta comercial", "type": "main", "index": 0 }],
+        [{ "node": "Handler: Reclamo", "type": "main", "index": 0 }],
+        [{ "node": "Handler: Default / HITL", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "patron" }, { "name": "router" }]
+}

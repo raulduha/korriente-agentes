@@ -1,0 +1,336 @@
+{
+  "name": "Korriente · Patrón Supervisor / Jerárquico",
+  "meta": {
+    "korriente": {
+      "agente": "patron-supervisor-jerarquico",
+      "version": "1.0.0",
+      "patron": "supervisor que delega, revisa y reasigna (2 iteraciones)",
+      "cuando_usar": "Tareas de calidad critica donde conviene un agente jefe que aprueba el trabajo antes de entregarlo.",
+      "costo_extra": "Cada iteracion = 2 llamadas LLM extra (supervisor + worker). Reservar para tareas de alto valor."
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-manual",
+      "name": "Tarea entrante",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "model_supervisor", "value": "claude-sonnet-4-6", "type": "string" },
+            { "id": "c2", "name": "model_worker", "value": "claude-haiku-4-5", "type": "string" },
+            { "id": "c3", "name": "tarea", "value": "REEMPLAZAR: descripcion de la tarea a ejecutar", "type": "string" },
+            { "id": "c4", "name": "criterio_exito", "value": "REEMPLAZAR: criterio que debe cumplir el resultado para ser aprobado", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model_supervisor, max_tokens: 500, system: 'Eres un supervisor experto. Tu rol es delegar la tarea al agente trabajador con instrucciones claras y precisas. Devuelve SOLO JSON valido: {\"instrucciones\": \"...\", \"entregable_esperado\": \"...\", \"criterio_exito\": \"...\"}', messages: [{ role: 'user', content: 'Tarea: ' + $('Config').item.json.tarea + '\\nCriterio de exito: ' + $('Config').item.json.criterio_exito }] }) }}",
+        "options": {}
+      },
+      "id": "node-supervisor-delega",
+      "name": "Supervisor: Delegar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 400],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d; try { d = JSON.parse(raw); } catch(e) { d = { instrucciones: raw, entregable_esperado: '', criterio_exito: $('Config').item.json.criterio_exito }; }\nreturn [{ json: { delegacion: d, tarea: $('Config').item.json.tarea } }];"
+      },
+      "id": "node-parse-delegacion",
+      "name": "Parsear delegacion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model_worker, max_tokens: 800, system: 'Eres un agente trabajador especialista. Recibiste instrucciones de tu supervisor. Ejecuta la tarea con cuidado y devuelve SOLO JSON valido: {\"resultado\": \"...\", \"notas\": \"...\"}', messages: [{ role: 'user', content: 'Instrucciones: ' + $json.delegacion.instrucciones + '\\nEntregable esperado: ' + $json.delegacion.entregable_esperado }] }) }}",
+        "options": {}
+      },
+      "id": "node-worker-1",
+      "name": "Worker: Ejecutar (1ª vez)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 400],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d; try { d = JSON.parse(raw); } catch(e) { d = { resultado: raw, notas: '' }; }\nreturn [{ json: { trabajo_v1: d, delegacion: $('Parsear delegacion').item.json.delegacion } }];"
+      },
+      "id": "node-parse-trabajo1",
+      "name": "Parsear trabajo v1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model_supervisor, max_tokens: 400, system: 'Eres un supervisor que revisa el trabajo del agente. Evalua si cumple el criterio de exito. Devuelve SOLO JSON valido: {\"aprobado\": true, \"calificacion\": 8, \"feedback\": \"...\"}. Se riguroso: aprobado=true solo si realmente cumple el criterio.', messages: [{ role: 'user', content: 'Criterio: ' + $json.delegacion.criterio_exito + '\\nTrabajo del agente: ' + $json.trabajo_v1.resultado }] }) }}",
+        "options": {}
+      },
+      "id": "node-supervisor-rev1",
+      "name": "Supervisor: Revisar (1ª)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 400],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet rev; try { rev = JSON.parse(raw); } catch(e) { rev = { aprobado: false, calificacion: 0, feedback: 'parse error' }; }\nreturn [{ json: { revision_1: rev, trabajo_v1: $('Parsear trabajo v1').item.json.trabajo_v1, delegacion: $('Parsear trabajo v1').item.json.delegacion } }];"
+      },
+      "id": "node-parse-rev1",
+      "name": "Parsear revision 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "c1", "leftValue": "={{ $json.revision_1.aprobado }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if1",
+      "name": "¿Aprobado en 1ª?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1760, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "r1", "name": "resultado_final", "value": "={{ $json.trabajo_v1.resultado }}", "type": "expression" },
+            { "id": "r2", "name": "iteraciones", "value": 1, "type": "number" },
+            { "id": "r3", "name": "calificacion", "value": "={{ $json.revision_1.calificacion }}", "type": "expression" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-out1",
+      "name": "Resultado final (1ª iter)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1980, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model_worker, max_tokens: 800, system: 'Eres un agente trabajador especialista. Tu trabajo anterior no fue aprobado. Mejoralo incorporando el feedback del supervisor. Devuelve SOLO JSON valido: {\"resultado\": \"...\", \"notas\": \"cambios_realizados\"}', messages: [{ role: 'user', content: 'Trabajo anterior: ' + $json.trabajo_v1.resultado + '\\nFeedback del supervisor: ' + $json.revision_1.feedback + '\\nInstrucciones originales: ' + $json.delegacion.instrucciones }] }) }}",
+        "options": {}
+      },
+      "id": "node-worker-2",
+      "name": "Worker: Reintentar con feedback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 580],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet d; try { d = JSON.parse(raw); } catch(e) { d = { resultado: raw, notas: '' }; }\nreturn [{ json: { trabajo_v2: d, delegacion: $('Parsear revision 1').item.json.delegacion, revision_1: $('Parsear revision 1').item.json.revision_1 } }];"
+      },
+      "id": "node-parse-trabajo2",
+      "name": "Parsear trabajo v2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 580]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Config').item.json.model_supervisor, max_tokens: 400, system: 'Eres un supervisor en la segunda y ultima revision. Evalua si el trabajo mejorado cumple el criterio. Devuelve SOLO JSON valido: {\"aprobado\": true, \"calificacion\": 9, \"feedback\": \"...\"}', messages: [{ role: 'user', content: 'Criterio: ' + $json.delegacion.criterio_exito + '\\nFeedback anterior: ' + $json.revision_1.feedback + '\\nTrabajo mejorado: ' + $json.trabajo_v2.resultado }] }) }}",
+        "options": {}
+      },
+      "id": "node-supervisor-rev2",
+      "name": "Supervisor: Revisar (2ª)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2420, 580],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REEMPLAZAR", "name": "Anthropic x-api-key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet rev; try { rev = JSON.parse(raw); } catch(e) { rev = { aprobado: false, calificacion: 0, feedback: 'parse error' }; }\nreturn [{ json: { revision_2: rev, trabajo_v2: $('Parsear trabajo v2').item.json.trabajo_v2 } }];"
+      },
+      "id": "node-parse-rev2",
+      "name": "Parsear revision 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 580]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "c1", "leftValue": "={{ $json.revision_2.aprobado }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if2",
+      "name": "¿Aprobado en 2ª?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2860, 580]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "r1", "name": "resultado_final", "value": "={{ $json.trabajo_v2.resultado }}", "type": "expression" },
+            { "id": "r2", "name": "iteraciones", "value": 2, "type": "number" },
+            { "id": "r3", "name": "calificacion", "value": "={{ $json.revision_2.calificacion }}", "type": "expression" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-out2",
+      "name": "Resultado final (2ª iter)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [3080, 420]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "h1", "name": "accion", "value": "hitl_revision_manual", "type": "string" },
+            { "id": "h2", "name": "alerta", "value": "Tope de iteraciones alcanzado. Ninguna version aprobada por el supervisor. Revision manual requerida.", "type": "string" },
+            { "id": "h3", "name": "mejor_version", "value": "={{ $json.trabajo_v2.resultado }}", "type": "expression" },
+            { "id": "h4", "name": "ultimo_feedback", "value": "={{ $json.revision_2.feedback }}", "type": "expression" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-hitl",
+      "name": "HITL — tope de iteraciones",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [3080, 740]
+    }
+  ],
+  "connections": {
+    "Tarea entrante": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Supervisor: Delegar", "type": "main", "index": 0 }]] },
+    "Supervisor: Delegar": { "main": [[{ "node": "Parsear delegacion", "type": "main", "index": 0 }]] },
+    "Parsear delegacion": { "main": [[{ "node": "Worker: Ejecutar (1ª vez)", "type": "main", "index": 0 }]] },
+    "Worker: Ejecutar (1ª vez)": { "main": [[{ "node": "Parsear trabajo v1", "type": "main", "index": 0 }]] },
+    "Parsear trabajo v1": { "main": [[{ "node": "Supervisor: Revisar (1ª)", "type": "main", "index": 0 }]] },
+    "Supervisor: Revisar (1ª)": { "main": [[{ "node": "Parsear revision 1", "type": "main", "index": 0 }]] },
+    "Parsear revision 1": { "main": [[{ "node": "¿Aprobado en 1ª?", "type": "main", "index": 0 }]] },
+    "¿Aprobado en 1ª?": {
+      "main": [
+        [{ "node": "Resultado final (1ª iter)", "type": "main", "index": 0 }],
+        [{ "node": "Worker: Reintentar con feedback", "type": "main", "index": 0 }]
+      ]
+    },
+    "Worker: Reintentar con feedback": { "main": [[{ "node": "Parsear trabajo v2", "type": "main", "index": 0 }]] },
+    "Parsear trabajo v2": { "main": [[{ "node": "Supervisor: Revisar (2ª)", "type": "main", "index": 0 }]] },
+    "Supervisor: Revisar (2ª)": { "main": [[{ "node": "Parsear revision 2", "type": "main", "index": 0 }]] },
+    "Parsear revision 2": { "main": [[{ "node": "¿Aprobado en 2ª?", "type": "main", "index": 0 }]] },
+    "¿Aprobado en 2ª?": {
+      "main": [
+        [{ "node": "Resultado final (2ª iter)", "type": "main", "index": 0 }],
+        [{ "node": "HITL — tope de iteraciones", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "korriente" }, { "name": "patron" }, { "name": "supervisor" }]
+}
