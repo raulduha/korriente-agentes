@@ -14,30 +14,51 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <nav className="nav">
           <div className="container nav-inner">
-            <Link href="/" className="logo">
-              KORRIENTE <b>AGENTES</b>
+
+            {/* Logo */}
+            <Link href="/" className="nav-logo">
+              <span className="nav-logo-mark">K</span>
+              <span className="nav-logo-text">
+                KORRIENTE <b>AGENTES</b>
+              </span>
             </Link>
+
+            {/* Links principales */}
             <div className="nav-links">
-              <Link href="/como-funciona">Cómo funciona</Link>
-              <Link href="/por-que-nosotros">Por qué Korriente</Link>
-              <Link href="/modelo-negocio">Modelo</Link>
-              <a href="/#demo">Demo</a>
-              <a href="/#precios">Precios</a>
-              <Link href="/workflows">Workflows</Link>
-              <Link href="/docs">Documentación</Link>
-              <Link href="/dashboard">Panel</Link>
+              <Link href="/como-funciona" className="nav-link">Cómo funciona</Link>
+              <Link href="/por-que-nosotros" className="nav-link">Por qué Korriente</Link>
+              <Link href="/workflows" className="nav-link">Workflows</Link>
+              <a href="/#precios" className="nav-link">Precios</a>
             </div>
-            <a href="/#precios" className="btn btn-primary" style={{ marginLeft: 8 }}>
-              Agendar diagnóstico
-            </a>
+
+            {/* Acciones secundarias + CTA */}
+            <div className="nav-actions">
+              <Link href="/modelo-negocio" className="nav-link nav-link-muted">Modelo</Link>
+              <Link href="/dashboard" className="nav-icon-link" title="Panel de cliente">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+              </Link>
+              <a href="/#precios" className="btn btn-primary nav-cta">
+                Agendar diagnóstico
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 6 }}>
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </a>
+            </div>
+
           </div>
         </nav>
         <main>{children}</main>
         <footer className="footer">
-          <div className="container" style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", width: "100%" }}>
-            <span className="logo">KORRIENTE <b>AGENTES</b></span>
-            <span>Agentes de IA que generan resultados medibles · Chile 2026</span>
-            <span style={{ marginLeft: "auto" }}>Datos tratados según Ley 19.628</span>
+          <div className="container footer-inner">
+            <Link href="/" className="nav-logo" style={{ gap: 8 }}>
+              <span className="nav-logo-mark" style={{ width: 28, height: 28, fontSize: 14 }}>K</span>
+              <span className="nav-logo-text">KORRIENTE <b>AGENTES</b></span>
+            </Link>
+            <span className="footer-tagline">Agentes de IA con resultados medibles · Chile 2026</span>
+            <span className="footer-legal">Ley 19.628 · Datos tratados con responsabilidad</span>
           </div>
         </footer>
       </body>
