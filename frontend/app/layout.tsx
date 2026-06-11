@@ -19,6 +19,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </Link>
             <div className="nav-links">
               <Link href="/como-funciona">Cómo funciona</Link>
+              <Link href="/por-que-nosotros">Por qué Korriente</Link>
               <Link href="/modelo-negocio">Modelo</Link>
               <a href="/#demo">Demo</a>
               <a href="/#precios">Precios</a>
